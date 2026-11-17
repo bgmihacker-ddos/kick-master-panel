@@ -1,0 +1,36 @@
+{
+  "MasterPanel": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "debug": false,
+    "secret_key": "kick_master_panel_2026"
+  },
+  "TargetStreamers": [
+    "xyroplayzz"
+  ],
+  "Workers": [
+    {
+      "id": "worker-1",
+      "name": "Serv00 S16 Worker",
+      "api_url": "http://s16.serv00.com:9645",
+      "ssh_host": "s16.serv00.com",
+      "ssh_user": "Nandpatel",
+      "ssh_pass": "Nandpatel0912",
+      "remote_dir": "/usr/home/Nandpatel/miner",
+      "enabled": true
+    }
+  ],
+  "VisionAI": {
+    "enabled": true,
+    "api_key": "AQ.Ab8RN6JJd33ErbavrTuBagM_tviWM4fj5hwCKdbislLqw_HMhg",
+    "interval_seconds": 90,
+    "auto_dispatch_comments": false,
+    "min_comment_interval": 35,
+    "max_comment_interval": 65
+  },
+  "Telegram": {
+    "enabled": true,
+    "bot_token": "8628064503:AAH5m4o2768Ww6P5q8n0P_8L13pPsp2f3Yk",
+    "allowed_users": [1333122348]
+  }
+}

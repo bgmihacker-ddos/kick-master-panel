@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kick Fleet Master Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Navigation Bar -->
+    <header class="top-nav">
+      <div class="brand">
+        <div class="kick-logo">K</div>
+        <div class="brand-text">
+          <h1>KICK MASTER <span class="accent">PANEL</span></h1>
+          <span class="subtext">Distributed Fleet & Vision Commander</span>
+        </div>
+      </div>
+      <div class="nav-controls">
+        <div class="pulse-indicator online" id="fleetIndicator">
+          <span class="dot"></span>
+          <span id="fleetStatusText">FLEET ONLINE</span>
+        </div>
+        <button class="btn btn-secondary" id="btnTriggerVision" onclick="triggerVisionScan()">
+          <span class="icon">👁️</span> Scan Vision
+        </button>
+        <button class="btn btn-secondary" id="btnRunGc" onclick="triggerGC()">
+          <span class="icon">🧹</span> Free RAM
+        </button>
+        <button class="btn btn-danger-outline" id="btnRestartWorker" onclick="restartWorker()">
+          <span class="icon">🔄</span> Restart Worker
+        </button>
+      </div>
+    </header>
+
+    <!-- Stat Summary Cards -->
+    <section class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">WORKER FLEET</span>
+          <span class="stat-icon">🖥️</span>
+        </div>
+        <div class="stat-value" id="statWorkers">1 / 1 Online</div>
+        <div class="stat-meta">
+          <span id="statRam">Memory: 38.5 MB</span>
+          <span class="badge badge-success">FreeBSD S16</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">ACTIVE VIEWERS</span>
+          <span class="stat-icon">👥</span>
+        </div>
+        <div class="stat-value" id="statViewers">0 / 0</div>
+        <div class="stat-meta">
+          <span>Tracking presence active</span>
+          <span class="badge badge-kick" id="statWatchingRate">0%</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">TOTAL CHANNEL POINTS</span>
+          <span class="stat-icon">🪙</span>
+        </div>
+        <div class="stat-value accent" id="statTotalPoints">0</div>
+        <div class="stat-meta">
+          <span id="statStreamerTarget">Streamer: xyroplayzz</span>
+          <span class="badge badge-primary" id="streamerLiveBadge">CHECKING</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">AUTO-COMMENTER</span>
+          <span class="stat-icon">🤖</span>
+        </div>
+        <div class="stat-value" id="statAutoComment">OFF</div>
+        <div class="stat-meta">
+          <span id="statQueueCount">Queue: 0 comments</span>
+          <label class="switch">
+            <input type="checkbox" id="toggleAutoDispatch" onchange="toggleAutoDispatch(this.checked)">
+            <span class="slider round"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Workspace Split -->
+    <main class="main-content">
+      <!-- Left Column: Vision & Dispatch -->
+      <div class="content-col left-col">
+        <!-- AI Vision Card -->
+        <div class="card vision-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">🎯</span> Live Stream & Vision Intelligence
+            </div>
+            <div class="card-actions">
+              <span class="streamer-pill" id="visionStreamer">xyroplayzz</span>
+              <button class="btn-sm" onclick="triggerVisionScan()">Refresh Frame</button>
+            </div>
+          </div>
+          
+          <div class="frame-container">
+            <img id="liveStreamFrame" src="/api/frame" alt="Live stream preview" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'640\' height=\'360\' viewBox=\'0 0 640 360\'><rect fill=\'%23111622\' width=\'640\' height=\'360\'/><text fill=\'%23667085\' font-family=\'sans-serif\' font-size=\'16\' x=\'50%25\' y=\'50%25\' text-anchor=\'middle\'>Waiting for stream frame capture...</text></svg>'">
+            <div class="frame-overlay" id="frameOverlay">
+              <span class="game-tag" id="visionGame">Scanning...</span>
+            </div>
+          </div>
+
+          <div class="vision-info">
+            <div class="vision-event-box">
+              <span class="label">DETECTED SITUATION:</span>
+              <p id="visionEventText">Waiting for live frame analysis...</p>
+            </div>
+
+            <div class="reactions-box">
+              <span class="label">SUGGESTED AI REACTIONS (Click to send instantly):</span>
+              <div class="reaction-chips" id="reactionChips">
+                <span class="chip-placeholder">Reactions will appear when stream is analyzed</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Manual Dispatch Card -->
+        <div class="card dispatch-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">💬</span> Dispatch Comment to Kick Chat
+            </div>
+          </div>
+
+          <form id="commentForm" onsubmit="sendComment(event)">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="selectAccount">Sender Account</label>
+                <select id="selectAccount" class="form-control">
+                  <option value="">Auto (Pick Random Active Account)</option>
+                </select>
+              </div>
+              <div class="form-group flex-1">
+                <label for="inputStreamer">Target Streamer</label>
+                <input type="text" id="inputStreamer" class="form-control" value="xyroplayzz">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="inputComment">Message</label>
+              <div class="input-with-button">
+                <input type="text" id="inputComment" class="form-control" placeholder="Type your comment or click a reaction above..." required autocomplete="off">
+                <button type="submit" class="btn btn-primary" id="btnSendComment">
+                  <span>Send</span> 🚀
+                </button>
+              </div>
+            </div>
+
+            <div class="quick-tags">
+              <span class="quick-tag" onclick="insertTag('W')">W</span>
+              <span class="quick-tag" onclick="insertTag('L')">L</span>
+              <span class="quick-tag" onclick="insertTag('ggs')">ggs</span>
+              <span class="quick-tag" onclick="insertTag('lets gooo')">lets gooo</span>
+              <span class="quick-tag" onclick="insertTag('sheesh 🔥')">sheesh 🔥</span>
+              <span class="quick-tag" onclick="insertTag('bro is cooking 💀')">bro is cooking 💀</span>
+              <span class="quick-tag" onclick="insertTag('INSANE PLAY')">INSANE PLAY</span>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Right Column: Dispatch History & Accounts Fleet -->
+      <div class="content-col right-col">
+        <!-- Live Dispatch History -->
+        <div class="card log-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">📜</span> Chat Dispatch Log
+            </div>
+            <button class="btn-sm btn-subtle" onclick="clearDispatchLog()">Clear</button>
+          </div>
+          <div class="table-wrapper mini-log-table">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 70px;">Time</th>
+                  <th style="width: 100px;">Account</th>
+                  <th>Message</th>
+                  <th style="width: 80px;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="dispatchLogBody">
+                <tr class="empty-row"><td colspan="4">No comments dispatched yet</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Accounts Fleet Table -->
+        <div class="card accounts-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">⚡</span> Fleet Accounts (<span id="accountCount">0</span>)
+            </div>
+            <input type="text" id="accountSearch" class="form-control-sm" placeholder="Search account..." oninput="filterAccounts()">
+          </div>
+          <div class="table-wrapper accounts-table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Status</th>
+                  <th>Points</th>
+                  <th>Proxy</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="accountsTableBody">
+                <tr class="empty-row"><td colspan="5">Loading accounts...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-info">
+        <span>Master Panel v2.0 • Ultra-Light Architecture • Zero-overhead Kick Miner</span>
+      </div>
+      <div class="footer-links">
+        <span>Serv00 Worker RAM: <strong id="footerRam">--</strong></span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

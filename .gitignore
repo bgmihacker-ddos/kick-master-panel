@@ -1,0 +1,5 @@
+__pycache__/
+*.py[cod]
+*.log
+deploy_worker.py
+do_deploy.py
