@@ -100,12 +100,13 @@ async def main():
     workers = [WorkerNodeClient(w) for w in workers_cfg]
     logger.info(f"Initialized {len(workers)} worker client node(s)")
 
-    # 2. Initialize Comment Dispatcher
-    dispatcher = CommentDispatcher(workers)
-    dispatcher.current_streamer = primary_streamer
-    dispatcher.auto_dispatch = vision_cfg.get("auto_dispatch_comments", False)
-    dispatcher.min_interval = vision_cfg.get("min_comment_interval", 35)
-    dispatcher.max_interval = vision_cfg.get("max_comment_interval", 65)
+    # 2. Initialize Central Fleet AutoChat Comment Dispatcher
+    autochat_cfg = config.get("AutoChat", {})
+    dispatcher = CommentDispatcher(workers, config=autochat_cfg)
+    dispatcher.current_streamer = autochat_cfg.get("target_streamer", primary_streamer)
+    dispatcher.auto_dispatch = autochat_cfg.get("enabled", True)
+    dispatcher.min_interval = autochat_cfg.get("min_interval_seconds", 35)
+    dispatcher.max_interval = autochat_cfg.get("max_interval_seconds", 65)
     if dispatcher.auto_dispatch:
         dispatcher.start()
 

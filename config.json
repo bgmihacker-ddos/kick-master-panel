@@ -8,6 +8,12 @@
   "TargetStreamers": [
     "xyroplayzz"
   ],
+  "AutoChat": {
+    "enabled": true,
+    "target_streamer": "xyroplayzz",
+    "min_interval_seconds": 35,
+    "max_interval_seconds": 65
+  },
   "Workers": [
     {
       "id": "worker-1",
