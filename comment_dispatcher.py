@@ -257,10 +257,14 @@ class CommentDispatcher:
             if s_data and s_data.get("online"):
                 return True
         
-        # 2. Check Kick API directly
+        # 2. Check Kick API directly with browser headers
         try:
             import aiohttp
-            async with aiohttp.ClientSession() as s:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json"
+            }
+            async with aiohttp.ClientSession(headers=headers) as s:
                 async with s.get(f"https://kick.com/api/v2/channels/{streamer_slug}", timeout=6) as resp:
                     if resp.status == 200:
                         data = await resp.json()

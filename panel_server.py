@@ -62,15 +62,20 @@ class PanelServer:
         return web.Response(text="index.html not found", status=404)
 
     async def handle_get_stats(self, request: web.Request) -> web.Response:
+        # Fetch all worker statuses concurrently in parallel
+        tasks = [w.fetch_status() for w in self.workers]
+        statuses = await asyncio.gather(*tasks, return_exceptions=True)
         worker_statuses = []
-        for w in self.workers:
-            st = await w.fetch_status()
-            worker_statuses.append(st)
+        for i, st in enumerate(statuses):
+            if isinstance(st, dict):
+                worker_statuses.append(st)
+            else:
+                worker_statuses.append(self.workers[i].last_status)
 
         target = self.target_streamers[0] if self.target_streamers else "xyroplayzz"
         vision_data = self.vision_engine.last_analysis if self.vision_engine else {}
         auto_disp = self.dispatcher.auto_dispatch if self.dispatcher else False
-        queue_len = len(self.dispatcher.comment_queue) if self.dispatcher else 0
+        queue_len = len(self.dispatcher.fleet_rotation_queue) if (self.dispatcher and hasattr(self.dispatcher, "fleet_rotation_queue")) else len(self.dispatcher.comment_queue if self.dispatcher else [])
         history = self.dispatcher.history if self.dispatcher else []
 
         return web.json_response({
@@ -83,10 +88,12 @@ class PanelServer:
         })
 
     async def handle_get_accounts(self, request: web.Request) -> web.Response:
+        tasks = [w.fetch_accounts() for w in self.workers]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         all_accounts = []
-        for w in self.workers:
-            accs = await w.fetch_accounts()
-            all_accounts.extend(accs)
+        for accs in results:
+            if isinstance(accs, list):
+                all_accounts.extend(accs)
         return web.json_response({"accounts": all_accounts})
 
     async def handle_get_frame(self, request: web.Request) -> web.Response:
