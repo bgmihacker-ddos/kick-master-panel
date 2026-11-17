@@ -71,7 +71,11 @@ class WorkerNodeClient:
                 async with session.get(f"{self.api_url}/accounts") as resp:
                     if resp.status == 200:
                         data = await resp.json()
-                        self.last_accounts = data.get("accounts", [])
+                        accounts = data.get("accounts", [])
+                        for a in accounts:
+                            a["node_id"] = self.node_id
+                            a["node_name"] = self.name
+                        self.last_accounts = accounts
                         return self.last_accounts
         except Exception:
             pass

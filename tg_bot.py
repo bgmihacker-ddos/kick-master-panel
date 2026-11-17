@@ -123,48 +123,61 @@ class TelegramCommander:
         worker_stats = []
         for w in self.workers:
             st = await w.fetch_status()
-            worker_stats.append(st)
+            worker_stats.append((w.name, st))
 
-        w0 = worker_stats[0] if worker_stats else {}
-        mem = w0.get("memory_mb", 0)
-        tot_acc = w0.get("total_accounts", 0)
-        viewers = w0.get("active_viewers", 0)
+        total_acc = sum(st.get("total_accounts", 0) for _, st in worker_stats)
+        total_viewers = sum(st.get("active_viewers", 0) for _, st in worker_stats)
+        total_mem = sum(st.get("memory_mb", 0) for _, st in worker_stats)
         target = self.target_streamers[0] if self.target_streamers else "xyroplayzz"
-        st_data = w0.get("streamers", {}).get(target, {})
-        is_live = "🟢 ONLINE" if st_data.get("online") else "⚪ OFFLINE"
 
+        is_live_any = any(st.get("streamers", {}).get(target, {}).get("online") for _, st in worker_stats)
+        is_live_str = "🟢 ONLINE" if is_live_any else "⚪ OFFLINE"
         auto_status = "🟢 ACTIVE" if (self.dispatcher and self.dispatcher.auto_dispatch) else "⚪ OFF"
 
-        status_msg = (
-            "🖥️ <b>Kick Fleet Status</b>\n\n"
-            f"• <b>Worker:</b> Serv00 S16\n"
-            f"• <b>Memory RSS:</b> <code>{mem} MB</code> / 512 MB\n"
-            f"• <b>Total Accounts:</b> {tot_acc}\n"
-            f"• <b>Active Viewers:</b> {viewers} (tracking presence)\n"
-            f"• <b>Target ({target}):</b> {is_live}\n"
-            f"• <b>Auto-Commenter:</b> {auto_status}\n"
-        )
-        await self.send_message(chat_id, status_msg)
+        lines = [
+            "🖥️ <b>Kick Fleet Status</b>\n",
+            f"• <b>Total Fleet Accounts:</b> <code>{total_acc}</code>",
+            f"• <b>Active Viewers:</b> <code>{total_viewers}</code>",
+            f"• <b>Target ({target}):</b> {is_live_str}",
+            f"• <b>Auto-Commenter:</b> {auto_status}",
+            f"• <b>Total Fleet RAM:</b> <code>{total_mem:.1f} MB</code>\n",
+            "<b>Worker Nodes:</b>"
+        ]
+
+        for name, st in worker_stats:
+            st_str = "🟢" if st.get("status") == "online" else "🔴"
+            acc_cnt = st.get("total_accounts", 0)
+            mem = st.get("memory_mb", 0)
+            lines.append(f" {st_str} <b>{name}:</b> {acc_cnt} accs | {mem} MB")
+
+        await self.send_message(chat_id, "\n".join(lines))
 
     async def cmd_points(self, chat_id: int):
         if not self.workers:
             await self.send_message(chat_id, "No workers configured.")
             return
 
-        accs = await self.workers[0].fetch_accounts()
-        if not accs:
-            await self.send_message(chat_id, "No accounts data retrieved from worker.")
+        all_accs = []
+        for w in self.workers:
+            try:
+                accs = await w.fetch_accounts()
+                all_accs.extend(accs)
+            except Exception:
+                pass
+
+        if not all_accs:
+            await self.send_message(chat_id, "No accounts data retrieved from workers.")
             return
 
-        total_pts = sum(a.get("points", 0) for a in accs)
-        sorted_accs = sorted(accs, key=lambda x: x.get("points", 0), reverse=True)
+        total_pts = sum(a.get("points", 0) for a in all_accs)
+        sorted_accs = sorted(all_accs, key=lambda x: x.get("points", 0), reverse=True)
 
-        lines = [f"🪙 <b>Total Points:</b> <code>{total_pts:,}</code>\n<b>Top Accounts:</b>"]
-        for a in sorted_accs[:10]:
-            lines.append(f"• <code>{a.get('alias')}</code>: {a.get('points', 0):,} pts")
+        lines = [f"🪙 <b>Total Fleet Points:</b> <code>{total_pts:,}</code> across {len(all_accs)} accounts\n<b>Top Accounts:</b>"]
+        for a in sorted_accs[:12]:
+            lines.append(f"• <code>{a.get('alias')}</code> ({a.get('node_name', 'node')}): {a.get('points', 0):,} pts")
 
-        if len(sorted_accs) > 10:
-            lines.append(f"<i>...and {len(sorted_accs) - 10} more accounts</i>")
+        if len(sorted_accs) > 12:
+            lines.append(f"<i>...and {len(sorted_accs) - 12} more accounts</i>")
 
         await self.send_message(chat_id, "\n".join(lines))
 

@@ -31,12 +31,27 @@ class CommentDispatcher:
         logger.info(f"[CommentDispatcher] Added {len(reactions)} reactions to queue. Total in queue: {len(self.comment_queue)}")
 
     async def dispatch_single_comment(self, comment: str, streamer: str = "xyroplayzz", account_alias: Optional[str] = None) -> Dict[str, Any]:
-        """Dispatches a single comment immediately through the first active worker node."""
-        active_worker = next((w for w in self.workers if w.enabled), None)
-        if not active_worker:
+        """Dispatches a single comment immediately through the appropriate worker node."""
+        target_worker = None
+        if account_alias:
+            # Find the worker holding this account
+            for w in self.workers:
+                if w.enabled and any(a.get("alias") == account_alias for a in w.last_accounts):
+                    target_worker = w
+                    break
+
+        # If no account specified or account not cached, pick an online worker randomly
+        if not target_worker:
+            online_workers = [w for w in self.workers if w.enabled and w.last_status.get("status") == "online"]
+            if not online_workers:
+                online_workers = [w for w in self.workers if w.enabled]
+            if online_workers:
+                target_worker = random.choice(online_workers)
+
+        if not target_worker:
             return {"success": False, "error": "No active worker node available"}
 
-        res = await active_worker.send_chat_message(comment, streamer=streamer, account_alias=account_alias)
+        res = await target_worker.send_chat_message(comment, streamer=streamer, account_alias=account_alias)
         log_entry = {
             "timestamp": time.strftime("%H:%M:%S"),
             "account": res.get("account", account_alias or "auto"),

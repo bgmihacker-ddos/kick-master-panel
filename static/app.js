@@ -18,14 +18,14 @@ async function fetchStats() {
     const data = await res.json();
 
     // Fleet Summary
-    const worker = (data.workers && data.workers[0]) || {};
-    const totalWorkers = (data.workers || []).length;
-    const onlineWorkers = (data.workers || []).filter(w => w.status === "online").length;
+    const workers = data.workers || [];
+    const totalWorkers = workers.length;
+    const onlineWorkers = workers.filter(w => w.status === "online").length;
     
     document.getElementById("statWorkers").innerText = `${onlineWorkers} / ${totalWorkers} Online`;
-    const memMb = worker.memory_mb || 0;
-    document.getElementById("statRam").innerText = `Memory: ${memMb} MB / 512 MB`;
-    document.getElementById("footerRam").innerText = `${memMb} MB`;
+    const totalMemMb = workers.reduce((sum, w) => sum + (w.memory_mb || 0), 0);
+    document.getElementById("statRam").innerText = `Fleet RAM: ${totalMemMb.toFixed(1)} MB`;
+    document.getElementById("footerRam").innerText = `${totalMemMb.toFixed(1)} MB`;
 
     // Fleet Indicator
     const fleetInd = document.getElementById("fleetIndicator");
@@ -39,21 +39,19 @@ async function fetchStats() {
     }
 
     // Viewers & Accounts
-    const totalAcc = worker.total_accounts || 0;
-    const activeViewers = worker.active_viewers || 0;
+    const totalAcc = workers.reduce((sum, w) => sum + (w.total_accounts || 0), 0);
+    const activeViewers = workers.reduce((sum, w) => sum + (w.active_viewers || 0), 0);
     document.getElementById("statViewers").innerText = `${activeViewers} / ${totalAcc}`;
     const rate = totalAcc > 0 ? Math.round((activeViewers / totalAcc) * 100) : 0;
     document.getElementById("statWatchingRate").innerText = `${rate}% Watching`;
 
     // Total Channel Points
-    const pts = (worker.total_points || 0).toLocaleString();
-    document.getElementById("statTotalPoints").innerText = pts;
+    const totalPoints = workers.reduce((sum, w) => sum + (w.total_points || 0), 0);
+    document.getElementById("statTotalPoints").innerText = totalPoints.toLocaleString();
 
     // Streamer Live Status
-    const streamers = worker.streamers || {};
     const targetStreamer = data.target_streamer || "xyroplayzz";
-    const stStatus = streamers[targetStreamer] || {};
-    const isLive = stStatus.online || false;
+    const isLive = workers.some(w => (w.streamers && w.streamers[targetStreamer] && w.streamers[targetStreamer].online));
     const liveBadge = document.getElementById("streamerLiveBadge");
     if (isLive) {
       liveBadge.className = "badge badge-success";
@@ -143,9 +141,16 @@ function renderAccountsTable(accounts) {
       ? acc.proxy.split("@").pop()
       : "Direct (Resident)";
 
+    const nodeBadge = acc.node_name
+      ? `<span class="badge badge-primary" style="font-size: 10px; margin-left: 6px; opacity: 0.85;">${escapeHtml(acc.node_name)}</span>`
+      : "";
+
     html += `
       <tr>
-        <td class="account-cell">${escapeHtml(acc.alias || "acc")}</td>
+        <td class="account-cell">
+          <strong>${escapeHtml(acc.alias || "acc")}</strong>
+          ${nodeBadge}
+        </td>
         <td>${watchingBadge}</td>
         <td class="points-cell">${(acc.points || 0).toLocaleString()}</td>
         <td style="color: var(--text-dim); font-size: 11px;">${escapeHtml(proxyText)}</td>
@@ -167,7 +172,8 @@ function renderAccountDropdown(accounts) {
   accounts.forEach(acc => {
     const opt = document.createElement("option");
     opt.value = acc.alias;
-    opt.innerText = `${acc.alias} (${(acc.points || 0).toLocaleString()} pts)`;
+    const nodeLabel = acc.node_name ? ` [${acc.node_name}]` : "";
+    opt.innerText = `${acc.alias}${nodeLabel} (${(acc.points || 0).toLocaleString()} pts)`;
     select.appendChild(opt);
   });
 

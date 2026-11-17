@@ -3,3 +3,12 @@ __pycache__/
 *.log
 deploy_worker.py
 do_deploy.py
+render_keys.json
+render_fleet.json
+all_miner_configs.json
+updated_miner_configs.json
+deploy_github_miners.py
+check_deploys.py
+get_all_configs.py
+inspect_render_fleet.py
+prep_distributed_configs.py
