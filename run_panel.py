@@ -54,6 +54,34 @@ async def periodic_vision_task(vision_engine: StreamVisionEngine, dispatcher: Co
             await asyncio.sleep(15)
 
 
+async def render_keepalive_pinger_task(interval_seconds: int = 240):
+    """Pings all Render worker endpoints and the master panel itself every 4 minutes to prevent Render free-tier sleep."""
+    logger.info(f"💓 Render Keep-Alive active (pinging every {interval_seconds}s)")
+    endpoints = [
+        "https://miner-2-dl7d.onrender.com/health",
+        "https://miner-3-1.onrender.com/health",
+        "https://miner-4.onrender.com/health",
+        "https://kick-master-panel.onrender.com/api/stats"
+    ]
+    await asyncio.sleep(15)
+    import aiohttp
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                for ep in endpoints:
+                    try:
+                        async with session.get(ep, timeout=15) as resp:
+                            logger.debug(f"[KeepAlive] Ping {ep} -> {resp.status}")
+                    except Exception as err:
+                        logger.debug(f"[KeepAlive] Ping notice for {ep}: {err}")
+            await asyncio.sleep(interval_seconds)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.debug(f"[KeepAlive] Loop notice: {e}")
+            await asyncio.sleep(30)
+
+
 async def main():
     logger.info("==================================================")
     logger.info("🚀 STARTING KICK MASTER CONTROL PANEL v2.0")
@@ -117,6 +145,9 @@ async def main():
     )
     await panel_server.start()
 
+    # 6. Start Render Anti-Sleep Keep-Alive Loop (Every 4 mins)
+    keepalive_task = asyncio.create_task(render_keepalive_pinger_task(interval_seconds=240))
+
     logger.success("✅ Master Panel fully operational!")
     logger.info(f"Dashboard: http://localhost:{master_cfg.get('port', 8080)}")
     logger.info("Press Ctrl+C to stop.")
@@ -129,6 +160,8 @@ async def main():
         pass
     finally:
         logger.info("Shutting down Master Panel...")
+        if keepalive_task:
+            keepalive_task.cancel()
         if vision_task:
             vision_task.cancel()
         if dispatcher:
