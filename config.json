@@ -42,6 +42,30 @@
       "name": "Render Miner-4",
       "api_url": "https://miner-4.onrender.com",
       "enabled": true
+    },
+    {
+      "id": "worker-5",
+      "name": "Render Miner-5",
+      "api_url": "https://miner-5-y5rn.onrender.com",
+      "enabled": true
+    },
+    {
+      "id": "worker-6",
+      "name": "Render Miner-6",
+      "api_url": "https://miner-6.onrender.com",
+      "enabled": true
+    },
+    {
+      "id": "worker-7",
+      "name": "Render Miner-7",
+      "api_url": "https://miner-7.onrender.com",
+      "enabled": true
+    },
+    {
+      "id": "worker-8",
+      "name": "Render Miner-8",
+      "api_url": "https://miner-8.onrender.com",
+      "enabled": true
     }
   ],
   "VisionAI": {
