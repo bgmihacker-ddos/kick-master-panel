@@ -26,6 +26,12 @@
       "enabled": true
     },
     {
+      "id": "worker-2",
+      "name": "Render Miner-2",
+      "api_url": "https://miner-2-dl7d.onrender.com",
+      "enabled": true
+    },
+    {
       "id": "worker-3",
       "name": "Render Miner-3",
       "api_url": "https://miner-3-1.onrender.com",
