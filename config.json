@@ -18,15 +18,18 @@
     "sikhwarrior",
     "sherlock",
     "8bit_goldy",
-    "mortal"
+    "mortal",
+    "soymamazon",
+    "zyrorewards",
+    "barisg"
   ],
   "CrossBet": {
     "enabled": true,
     "hero_alias": "4 valo 01",
     "hero_token": "457580269|dGd5X4LHsmuS0B0CwayArlmOjoshIllkKkVdojl7",
     "hero_proxy": "http://uyvvrfzo:62mshoyu0jet@38.154.185.97:6370",
-    "hero_bet_pct": 0.30,
-    "feeder_bet_pct": 0.50,
+    "hero_bet_pct": 0.3,
+    "feeder_bet_pct": 0.5,
     "max_hero_bet": 15000,
     "max_feeder_bet": 5000,
     "min_consensus_pct": 55.0,
@@ -44,7 +47,10 @@
       "sikhwarrior",
       "sherlock",
       "8bit_goldy",
-      "mortal"
+      "mortal",
+      "soymamazon",
+      "zyrorewards",
+      "barisg"
     ]
   },
   "AutoRedeem": {
@@ -64,7 +70,10 @@
       "uc",
       "bgmi",
       "code",
-      "in game"
+      "in game",
+      "robux",
+      "tip",
+      "epin"
     ],
     "hero_alias": "4 valo 01",
     "hero_token": "457580269|dGd5X4LHsmuS0B0CwayArlmOjoshIllkKkVdojl7",
