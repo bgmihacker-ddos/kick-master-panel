@@ -21,7 +21,11 @@
     "mortal",
     "soymamazon",
     "zyrorewards",
-    "barisg"
+    "barisg",
+    "combatry",
+    "cuffem",
+    "adinross",
+    "sandraskins"
   ],
   "CrossBet": {
     "enabled": true,
@@ -50,7 +54,11 @@
       "mortal",
       "soymamazon",
       "zyrorewards",
-      "barisg"
+      "barisg",
+      "combatry",
+      "cuffem",
+      "adinross",
+      "sandraskins"
     ]
   },
   "AutoRedeem": {
@@ -73,7 +81,17 @@
       "in game",
       "robux",
       "tip",
-      "epin"
+      "epin",
+      "mouse",
+      "keyboard",
+      "earphone",
+      "headset",
+      "kulakl\u0131k",
+      "klavye",
+      "mic",
+      "monitor",
+      "pc",
+      "iem"
     ],
     "hero_alias": "4 valo 01",
     "hero_token": "457580269|dGd5X4LHsmuS0B0CwayArlmOjoshIllkKkVdojl7",
