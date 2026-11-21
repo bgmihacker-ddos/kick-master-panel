@@ -96,7 +96,9 @@
     "hero_alias": "4 valo 01",
     "hero_token": "457580269|dGd5X4LHsmuS0B0CwayArlmOjoshIllkKkVdojl7",
     "hero_proxy": "http://uyvvrfzo:62mshoyu0jet@38.154.185.97:6370",
-    "input_message": "Insta: _.nand._.patel._ | Discord: nandpatel2758"
+    "input_message": "Insta: _.nand._.patel._ | Discord: nandpatel2758",
+    "tg_bot_token": "9139027889:AAFqdc3lsAYDH-9MEByjZlIdR6-KGbaBRhw",
+    "tg_chat_id": "6181084198"
   },
   "Workers": [
     {
@@ -148,5 +150,10 @@
       "readonly": false,
       "enabled": true
     }
-  ]
+  ],
+  "Telegram": {
+    "enabled": true,
+    "bot_token": "9139027889:AAFqdc3lsAYDH-9MEByjZlIdR6-KGbaBRhw",
+    "chat_id": "6181084198"
+  }
 }

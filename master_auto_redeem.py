@@ -1,7 +1,7 @@
 """
 Master Auto-Redeem Engine for Kick Fleet Panel
 Monitors channel point rewards on target streamers and auto-redeems for the Hero account
-when target threshold is met.
+when target threshold is met. Sends instant Telegram notifications.
 """
 
 import os
@@ -38,18 +38,55 @@ class MasterAutoRedeem:
         self.enabled = self.config.get("enabled", True)
         self.target_streamer = self.config.get("target_streamer", "soulaman")
         self.target_keywords = [
-            k.lower() for k in self.config.get("target_keywords", ["badge", "jersey", "highlight", "vp", "valorant"])
+            k.lower() for k in self.config.get("target_keywords", [
+                "badge", "jersey", "highlight", "vp", "valorant", "gift", "card",
+                "steam", "upi", "gpay", "uc", "bgmi", "code", "in game", "robux",
+                "tip", "epin", "mouse", "keyboard", "earphone", "headset", "iem", "pc"
+            ])
         ]
         self.hero_alias = self.config.get("hero_alias", "4 valo 01")
         self.hero_token = self.config.get("hero_token")
         self.hero_proxy = self.config.get("hero_proxy")
         self.input_message = self.config.get("input_message", "Insta: _.nand._.patel._ | Discord: nandpatel2758")
         
+        # Telegram notification config
+        self.tg_bot_token = self.config.get("tg_bot_token", "9139027889:AAFqdc3lsAYDH-9MEByjZlIdR6-KGbaBRhw")
+        self.tg_chat_id = self.config.get("tg_chat_id", "6181084198")
+
         self.available_rewards: List[Dict[str, Any]] = []
         self.redemption_history: List[Dict[str, Any]] = []
         self.redeemed_cache: Dict[str, float] = {}
         self.cooldown_seconds = 43200  # 12 hours
         self._is_stopped = False
+
+    def send_telegram_notification(self, reward_title: str, cost: int, streamer: str, hero_alias: str, msg: str = ""):
+        """Sends an instant formatted Telegram notification when a reward is redeemed."""
+        if not self.tg_bot_token or not self.tg_chat_id:
+            return
+
+        text = (
+            f"🎁 *KICK REWARD REDEEMED!*\n\n"
+            f"🏆 *Reward:* {reward_title}\n"
+            f"💰 *Cost:* {cost:,} Points\n"
+            f"📺 *Streamer:* `{streamer}`\n"
+            f"👑 *Hero Account:* `{hero_alias}`\n"
+        )
+        if msg:
+            text += f"💬 *Contact / Message:* `{msg}`\n"
+        text += f"⏰ *Time:* {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}"
+
+        try:
+            url = f"https://api.telegram.org/bot{self.tg_bot_token}/sendMessage"
+            payload = json.dumps({
+                "chat_id": self.tg_chat_id,
+                "text": text,
+                "parse_mode": "Markdown"
+            }).encode("utf-8")
+            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                logger.success(f"[AutoRedeem] 📱 Telegram redeem alert sent to {self.tg_chat_id}")
+        except Exception as e:
+            logger.error(f"[AutoRedeem] Failed to send Telegram alert: {e}")
 
     def fetch_streamer_rewards(self, streamer: str) -> List[Dict[str, Any]]:
         url = f"https://kick.com/api/v2/channels/{streamer}/rewards"
@@ -118,6 +155,10 @@ class MasterAutoRedeem:
                 }
                 self.redemption_history.insert(0, record)
                 logger.success(f"🎉 [AutoRedeem] SUCCESS! Redeemed '{reward_title}' ({cost:,} pts) on {streamer} for Hero {self.hero_alias}!")
+                
+                # Send instant Telegram notification
+                self.send_telegram_notification(reward_title, cost, streamer, self.hero_alias, msg)
+                
                 return {"status": "success", "reward": reward_title, "cost": cost}
             else:
                 logger.warning(f"[AutoRedeem] HTTP {resp.status_code} redeeming '{reward_title}': {resp.text}")
