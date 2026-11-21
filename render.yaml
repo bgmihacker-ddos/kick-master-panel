@@ -12,3 +12,7 @@ services:
         value: 3.11.0
       - key: PORT
         value: 8080
+      - key: HERO_TOKEN
+        value: 457580269|dGd5X4LHsmuS0B0CwayArlmOjoshIllkKkVdojl7
+      - key: HERO_PROXY
+        value: http://uyvvrfzo:62mshoyu0jet@38.154.185.97:6370

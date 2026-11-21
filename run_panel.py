@@ -32,7 +32,18 @@ def load_config() -> dict:
         logger.error(f"Config file not found at {config_path}")
         sys.exit(1)
     with open(config_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        cfg = json.load(f)
+
+    hero_tok = os.environ.get("HERO_TOKEN")
+    hero_prx = os.environ.get("HERO_PROXY")
+    if hero_tok:
+        cfg.setdefault("CrossBet", {})["hero_token"] = hero_tok
+        cfg.setdefault("AutoRedeem", {})["hero_token"] = hero_tok
+    if hero_prx:
+        cfg.setdefault("CrossBet", {})["hero_proxy"] = hero_prx
+        cfg.setdefault("AutoRedeem", {})["hero_proxy"] = hero_prx
+
+    return cfg
 
 
 async def render_keepalive_pinger_task(workers: list, interval_seconds: int = 240):
