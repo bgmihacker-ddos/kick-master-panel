@@ -51,11 +51,17 @@ class MasterCrossBetEngine:
 
     def fetch_streamer_prediction(self, streamer: str) -> Optional[Dict[str, Any]]:
         """Fetch latest prediction payload directly from Kick API using curl_cffi."""
-        url = f"https://kick.com/api/v2/channels/{streamer}/predictions"
+        url = f"https://kick.com/api/v2/channels/{streamer}/predictions/latest"
         try:
             from curl_cffi import requests
             proxies = {"http": self.hero_proxy, "https": self.hero_proxy} if self.hero_proxy else None
             sess = requests.Session(impersonate="chrome120", proxies=proxies)
+            sess.headers.update({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Origin": "https://kick.com",
+                "Referer": f"https://kick.com/{streamer}"
+            })
             resp = sess.get(url, timeout=8)
             if resp.status_code == 200:
                 return resp.json()
