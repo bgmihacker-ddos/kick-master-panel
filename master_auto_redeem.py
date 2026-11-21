@@ -53,30 +53,16 @@ class MasterAutoRedeem:
 
     def fetch_streamer_rewards(self, streamer: str) -> List[Dict[str, Any]]:
         url = f"https://kick.com/api/v2/channels/{streamer}/rewards"
-        # 1. Try direct first (Kick rewards endpoint is public)
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Accept": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-            }
-        )
         try:
-            with urllib.request.urlopen(req, timeout=6) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+            from curl_cffi import requests
+            proxies = {"http": self.hero_proxy, "https": self.hero_proxy} if self.hero_proxy else None
+            sess = requests.Session(impersonate="chrome120", proxies=proxies)
+            resp = sess.get(url, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
                 return data.get("data", [])
-        except Exception:
-            pass
-
-        # 2. Try with proxy if configured
-        if self.hero_proxy:
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": self.hero_proxy, "https": self.hero_proxy}))
-            try:
-                with opener.open(req, timeout=8) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    return data.get("data", [])
-            except Exception as e:
-                logger.debug(f"[AutoRedeem] Failed fetching rewards with proxy for {streamer}: {e}")
+        except Exception as e:
+            logger.debug(f"[AutoRedeem] Error fetching rewards for {streamer}: {e}")
         return []
 
     def is_target_reward(self, reward: Dict[str, Any]) -> bool:
@@ -108,27 +94,19 @@ class MasterAutoRedeem:
             "message": msg
         }
 
-        handlers = []
-        if self.hero_proxy:
-            handlers.append(urllib.request.ProxyHandler({"http": self.hero_proxy, "https": self.hero_proxy}))
-        opener = urllib.request.build_opener(*handlers)
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
+        try:
+            from curl_cffi import requests
+            proxies = {"http": self.hero_proxy, "https": self.hero_proxy} if self.hero_proxy else None
+            sess = requests.Session(impersonate="chrome120", proxies=proxies)
+            headers = {
                 "Authorization": f"Bearer {self.hero_token}",
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "Origin": "https://kick.com",
                 "Referer": f"https://kick.com/{streamer}",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-            },
-            method="POST"
-        )
-
-        try:
-            with opener.open(req, timeout=10) as resp:
-                resp_data = json.loads(resp.read().decode("utf-8"))
+            }
+            resp = sess.post(url, json=payload, headers=headers, timeout=12)
+            if resp.status_code in (200, 201):
                 self.redeemed_cache[cache_key] = time.time()
                 record = {
                     "streamer": streamer,
@@ -141,10 +119,9 @@ class MasterAutoRedeem:
                 self.redemption_history.insert(0, record)
                 logger.success(f"🎉 [AutoRedeem] SUCCESS! Redeemed '{reward_title}' ({cost:,} pts) on {streamer} for Hero {self.hero_alias}!")
                 return {"status": "success", "reward": reward_title, "cost": cost}
-        except urllib.error.HTTPError as e:
-            err = e.read().decode("utf-8", errors="ignore")
-            logger.warning(f"[AutoRedeem] HTTP {e.code} redeeming '{reward_title}': {err}")
-            return {"status": "error", "code": e.code, "message": err}
+            else:
+                logger.warning(f"[AutoRedeem] HTTP {resp.status_code} redeeming '{reward_title}': {resp.text}")
+                return {"status": "error", "code": resp.status_code, "message": resp.text}
         except Exception as e:
             logger.error(f"[AutoRedeem] Error redeeming '{reward_title}': {e}")
             return {"status": "error", "message": str(e)}

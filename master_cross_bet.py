@@ -45,21 +45,18 @@ class MasterCrossBetEngine:
         self._is_stopped = False
 
     def fetch_streamer_prediction(self, streamer: str) -> Optional[Dict[str, Any]]:
-        """Fetch latest prediction payload directly from Kick API."""
+        """Fetch latest prediction payload directly from Kick API using curl_cffi."""
         url = f"https://kick.com/api/v2/channels/{streamer}/predictions"
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Accept": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-            }
-        )
         try:
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                return data
+            from curl_cffi import requests
+            proxies = {"http": self.hero_proxy, "https": self.hero_proxy} if self.hero_proxy else None
+            sess = requests.Session(impersonate="chrome120", proxies=proxies)
+            resp = sess.get(url, timeout=8)
+            if resp.status_code == 200:
+                return resp.json()
         except Exception:
-            return None
+            pass
+        return None
 
     def parse_prediction(self, raw_data: Any) -> Optional[Dict[str, Any]]:
         if not raw_data:
