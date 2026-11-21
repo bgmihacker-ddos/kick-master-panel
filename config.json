@@ -6,7 +6,19 @@
   },
   "TargetStreamers": [
     "soulaman",
-    "xyroplayzz"
+    "xyroplayzz",
+    "hydraflick",
+    "s8ul_sid",
+    "klurge",
+    "harshkhelraay",
+    "soulzeref",
+    "nonstopgaming",
+    "pinkcess",
+    "binks69",
+    "sikhwarrior",
+    "sherlock",
+    "8bit_goldy",
+    "mortal"
   ],
   "CrossBet": {
     "enabled": true,
@@ -20,7 +32,19 @@
     "min_consensus_pct": 55.0,
     "streamers": [
       "soulaman",
-      "xyroplayzz"
+      "xyroplayzz",
+      "hydraflick",
+      "s8ul_sid",
+      "klurge",
+      "harshkhelraay",
+      "soulzeref",
+      "nonstopgaming",
+      "pinkcess",
+      "binks69",
+      "sikhwarrior",
+      "sherlock",
+      "8bit_goldy",
+      "mortal"
     ]
   },
   "AutoRedeem": {
@@ -31,7 +55,16 @@
       "jersey",
       "highlight",
       "vp",
-      "valorant"
+      "valorant",
+      "gift",
+      "card",
+      "steam",
+      "upi",
+      "gpay",
+      "uc",
+      "bgmi",
+      "code",
+      "in game"
     ],
     "hero_alias": "4 valo 01",
     "hero_token": "457580269|dGd5X4LHsmuS0B0CwayArlmOjoshIllkKkVdojl7",
