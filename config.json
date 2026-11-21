@@ -59,7 +59,71 @@
       "cuffem",
       "adinross",
       "sandraskins"
-    ]
+    ],
+    "hero_aliases": [
+      "Main Account",
+      "second account",
+      "3 nand 549",
+      "4 valo 01",
+      "5 raju",
+      "npfc0912",
+      "n9654",
+      "n09144",
+      "reward0912",
+      "valo02"
+    ],
+    "hero_accounts": {
+      "Main Account": {
+        "alias": "Main Account",
+        "token": "450197834|vhgkbZSzXkwlA8Y3GCsleNVCIvTLo4HcuuDR7h7q",
+        "proxy": null
+      },
+      "second account": {
+        "alias": "second account",
+        "token": "450217114|YMlQRnHoEO6mM408JWkTd8KwSp4OenP9tkphNJnR",
+        "proxy": null
+      },
+      "3 nand 549": {
+        "alias": "3 nand 549",
+        "token": "457579935|A7q3cYFPTGNFgiFJtCUP80C8R6oy7oeTkf1PV0yH",
+        "proxy": null
+      },
+      "4 valo 01": {
+        "alias": "4 valo 01",
+        "token": "457580269|dGd5X4LHsmuS0B0CwayArlmOjoshIllkKkVdojl7",
+        "proxy": null
+      },
+      "5 raju": {
+        "alias": "5 raju",
+        "token": "457580573|js3Pq5m6dMkCUtLDvosoVYN6KJO68fYaLyTiPBrt",
+        "proxy": null
+      },
+      "npfc0912": {
+        "alias": "npfc0912",
+        "token": "450139726|flK30jq22JwXJSKE1fFpmRg8y6gqRGrVVMS2Gj3J",
+        "proxy": null
+      },
+      "n9654": {
+        "alias": "n9654",
+        "token": "450150354|NjbNWZStpw90xwVE0PCv72OQN6gCrjYNSdWunfuA",
+        "proxy": null
+      },
+      "n09144": {
+        "alias": "n09144",
+        "token": "450150135|dZ7ONSDD0Eo4S5nrXxdNXbXbqmiMqq2wyabnLx1R",
+        "proxy": null
+      },
+      "reward0912": {
+        "alias": "reward0912",
+        "token": "450116861|jnOBaxsBn42hA5vgDSOyIM5ZkZBUrQ4ENTqoWKKN",
+        "proxy": null
+      },
+      "valo02": {
+        "alias": "valo02",
+        "token": "450144293|f37CJzfDpVhByKKPWAD84yhT53Q116nnOGlSK9DS",
+        "proxy": null
+      }
+    }
   },
   "AutoRedeem": {
     "enabled": true,
@@ -98,7 +162,71 @@
     "hero_proxy": "http://uyvvrfzo:62mshoyu0jet@38.154.185.97:6370",
     "input_message": "Insta: _.nand._.patel._ | Discord: nandpatel2758",
     "tg_bot_token": "9139027889:AAFqdc3lsAYDH-9MEByjZlIdR6-KGbaBRhw",
-    "tg_chat_id": "6181084198"
+    "tg_chat_id": "6181084198",
+    "hero_aliases": [
+      "Main Account",
+      "second account",
+      "3 nand 549",
+      "4 valo 01",
+      "5 raju",
+      "npfc0912",
+      "n9654",
+      "n09144",
+      "reward0912",
+      "valo02"
+    ],
+    "hero_accounts": {
+      "Main Account": {
+        "alias": "Main Account",
+        "token": "450197834|vhgkbZSzXkwlA8Y3GCsleNVCIvTLo4HcuuDR7h7q",
+        "proxy": null
+      },
+      "second account": {
+        "alias": "second account",
+        "token": "450217114|YMlQRnHoEO6mM408JWkTd8KwSp4OenP9tkphNJnR",
+        "proxy": null
+      },
+      "3 nand 549": {
+        "alias": "3 nand 549",
+        "token": "457579935|A7q3cYFPTGNFgiFJtCUP80C8R6oy7oeTkf1PV0yH",
+        "proxy": null
+      },
+      "4 valo 01": {
+        "alias": "4 valo 01",
+        "token": "457580269|dGd5X4LHsmuS0B0CwayArlmOjoshIllkKkVdojl7",
+        "proxy": null
+      },
+      "5 raju": {
+        "alias": "5 raju",
+        "token": "457580573|js3Pq5m6dMkCUtLDvosoVYN6KJO68fYaLyTiPBrt",
+        "proxy": null
+      },
+      "npfc0912": {
+        "alias": "npfc0912",
+        "token": "450139726|flK30jq22JwXJSKE1fFpmRg8y6gqRGrVVMS2Gj3J",
+        "proxy": null
+      },
+      "n9654": {
+        "alias": "n9654",
+        "token": "450150354|NjbNWZStpw90xwVE0PCv72OQN6gCrjYNSdWunfuA",
+        "proxy": null
+      },
+      "n09144": {
+        "alias": "n09144",
+        "token": "450150135|dZ7ONSDD0Eo4S5nrXxdNXbXbqmiMqq2wyabnLx1R",
+        "proxy": null
+      },
+      "reward0912": {
+        "alias": "reward0912",
+        "token": "450116861|jnOBaxsBn42hA5vgDSOyIM5ZkZBUrQ4ENTqoWKKN",
+        "proxy": null
+      },
+      "valo02": {
+        "alias": "valo02",
+        "token": "450144293|f37CJzfDpVhByKKPWAD84yhT53Q116nnOGlSK9DS",
+        "proxy": null
+      }
+    }
   },
   "Workers": [
     {

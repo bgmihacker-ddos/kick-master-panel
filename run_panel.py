@@ -98,16 +98,22 @@ async def main():
     auto_redeem_cfg = config.get("AutoRedeem", {})
     auto_redeem_engine = MasterAutoRedeem(auto_redeem_cfg)
 
-    async def get_hero_points():
+    async def get_heroes_data():
+        heroes_map = {}
+        target_aliases = set(auto_redeem_cfg.get("hero_aliases", [auto_redeem_cfg.get("hero_alias", "4 valo 01")]))
         for w in workers:
             accs = await w.fetch_accounts()
             for a in accs:
-                if a.get("alias") == auto_redeem_cfg.get("hero_alias", "4 valo 01"):
+                alias = a.get("alias")
+                if alias in target_aliases:
                     st_map = a.get("points_by_streamer") or {}
-                    return st_map.get(auto_redeem_cfg.get("target_streamer", "soulaman"), 0)
-        return 0
+                    heroes_map[alias] = st_map
+        return heroes_map
 
-    auto_redeem_task = asyncio.create_task(auto_redeem_engine.run_loop(get_hero_points))
+    async def get_target_streamers():
+        return config.get("TargetStreamers", ["soulaman"])
+
+    auto_redeem_task = asyncio.create_task(auto_redeem_engine.run_loop(get_heroes_data, get_target_streamers))
 
     # 3. Initialize & Start Web Panel Server
     panel_port = int(os.environ.get("PORT", master_cfg.get("port", 8080)))

@@ -30,6 +30,11 @@ class MasterCrossBetEngine:
 
         self.enabled = self.config.get("enabled", True)
         self.hero_alias = self.config.get("hero_alias", "4 valo 01")
+        self.hero_aliases = self.config.get("hero_aliases", [
+            "Main Account", "second account", "3 nand 549", "4 valo 01", "5 raju",
+            "npfc0912", "n9654", "n09144", "reward0912", "valo02"
+        ])
+        self.hero_accounts_map = self.config.get("hero_accounts", {})
         self.hero_token = self.config.get("hero_token")
         self.hero_proxy = self.config.get("hero_proxy")
         self.hero_bet_pct = float(self.config.get("hero_bet_pct", 0.30))
@@ -200,43 +205,47 @@ class MasterCrossBetEngine:
         )
         self.processed_predictions.add(pred_id)
 
-        hero_acc = next((a for a in all_accounts if a["alias"] == self.hero_alias), None)
-        other_accs = [a for a in all_accounts if a["alias"] != self.hero_alias]
+        hero_aliases_set = set(self.hero_aliases)
+        hero_accs = [a for a in all_accounts if a["alias"] in hero_aliases_set]
+        other_accs = [a for a in all_accounts if a["alias"] not in hero_aliases_set]
         executed_bets = []
 
-        # 1. Hero Bet Execution (Hero bets FIRST with retries)
-        if hero_acc:
-            amt = max(10, int(hero_acc["points"] * self.hero_bet_pct))
+        # 1. Multi-Hero Bet Execution (Top 10 Hero accounts bet on the winning side FIRST)
+        for h_acc in hero_accs:
+            amt = max(10, int(h_acc["points"] * self.hero_bet_pct))
             amt = min(amt, self.max_hero_bet)
-            logger.info(f"👑 Executing Hero [{self.hero_alias}] bet FIRST on '{hero_title}' ({amt:,} pts)...")
-            if self.hero_token:
+            h_alias = h_acc["alias"]
+            logger.info(f"👑 Executing Hero [{h_alias}] bet on '{hero_title}' ({amt:,} pts)...")
+            h_token = self.hero_accounts_map.get(h_alias, {}).get("token") or (self.hero_token if h_alias == self.hero_alias else None)
+            h_proxy = self.hero_accounts_map.get(h_alias, {}).get("proxy") or self.hero_proxy
+            if h_token:
                 try:
                     from kick_prediction import KickPrediction
-                    pred_client = KickPrediction(proxy=self.hero_proxy)
+                    pred_client = KickPrediction(proxy=h_proxy)
                     ok, res = await asyncio.to_thread(
                         pred_client.vote_prediction,
-                        streamer, hero_id, amt, self.hero_token
+                        streamer, hero_id, amt, h_token
                     )
                     if ok:
-                        logger.success(f"👑 Hero bet successfully placed! Result: {res}")
+                        logger.success(f"👑 Hero [{h_alias}] bet successfully placed! Result: {res}")
                         executed_bets.append({
-                            "account": self.hero_alias,
-                            "worker": hero_acc["worker"].name + " (Direct Kick API)",
+                            "account": h_alias,
+                            "worker": h_acc["worker"].name + " (Direct Kick API)",
                             "role": "HERO_COLLECTOR",
                             "outcome": hero_title,
                             "amount": amt,
                             "status": "success"
                         })
                     else:
-                        logger.warning(f"Hero direct vote failed: {res}")
+                        logger.warning(f"Hero [{h_alias}] direct vote notice: {res}")
                 except Exception as e:
-                    logger.error(f"Error placing direct Hero bet: {e}")
-            elif not getattr(hero_acc["worker"], "readonly", False):
-                res = await hero_acc["worker"].send_bet(self.hero_alias, streamer, hero_id, amt)
+                    logger.error(f"Error placing direct Hero [{h_alias}] bet: {e}")
+            elif not getattr(h_acc["worker"], "readonly", False):
+                res = await h_acc["worker"].send_bet(h_alias, streamer, hero_id, amt)
                 if res.get("success"):
                     executed_bets.append({
-                        "account": self.hero_alias,
-                        "worker": hero_acc["worker"].name,
+                        "account": h_alias,
+                        "worker": h_acc["worker"].name,
                         "role": "HERO_COLLECTOR",
                         "outcome": hero_title,
                         "amount": amt,

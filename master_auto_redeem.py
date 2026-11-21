@@ -1,7 +1,7 @@
 """
 Master Auto-Redeem Engine for Kick Fleet Panel
-Monitors channel point rewards on target streamers and auto-redeems for the Hero account
-when target threshold is met. Sends instant Telegram notifications.
+Monitors channel point rewards on target streamers and auto-redeems for the Top 10 Hero accounts.
+Sends instant Telegram notifications when points are ready to redeem and upon successful redemption.
 """
 
 import os
@@ -44,6 +44,18 @@ class MasterAutoRedeem:
                 "tip", "epin", "mouse", "keyboard", "earphone", "headset", "iem", "pc"
             ])
         ]
+        
+        # Multi-Hero accounts dictionary: alias -> {token, proxy}
+        raw_heroes = self.config.get("hero_accounts", {})
+        self.hero_accounts: Dict[str, Dict[str, Any]] = {}
+        if isinstance(raw_heroes, dict):
+            for alias, val in raw_heroes.items():
+                if isinstance(val, dict):
+                    self.hero_accounts[alias] = val
+                elif isinstance(val, str):
+                    self.hero_accounts[alias] = {"alias": alias, "token": val, "proxy": None}
+        
+        # Single fallback for legacy calls
         self.hero_alias = self.config.get("hero_alias", "4 valo 01")
         self.hero_token = self.config.get("hero_token")
         self.hero_proxy = self.config.get("hero_proxy")
@@ -56,16 +68,47 @@ class MasterAutoRedeem:
         self.available_rewards: List[Dict[str, Any]] = []
         self.redemption_history: List[Dict[str, Any]] = []
         self.redeemed_cache: Dict[str, float] = {}
+        self.ready_alerted_cache: Dict[str, float] = {}
         self.cooldown_seconds = 43200  # 12 hours
+        self.ready_alert_cooldown = 7200  # 2 hours per alert to avoid spam
         self._is_stopped = False
 
-    def send_telegram_notification(self, reward_title: str, cost: int, streamer: str, hero_alias: str, msg: str = ""):
-        """Sends an instant formatted Telegram notification when a reward is redeemed."""
+    def send_telegram_ready_alert(self, alias: str, streamer: str, reward_title: str, cost: int, current_pts: int):
+        """Sends an instant alert when points are READY TO REDEEM."""
         if not self.tg_bot_token or not self.tg_chat_id:
             return
 
         text = (
-            f"🎁 *KICK REWARD REDEEMED!*\n\n"
+            f"🔔 *POINTS READY TO REDEEM!*\n\n"
+            f"👑 *Hero Account:* `{alias}`\n"
+            f"📺 *Streamer:* `{streamer}`\n"
+            f"🎁 *Qualified Reward:* {reward_title}\n"
+            f"💰 *Reward Cost:* {cost:,} Points\n"
+            f"💳 *Current Points:* {current_pts:,} Points\n"
+            f"⚡ *Status:* Target reached! Ready for redemption.\n"
+            f"⏰ *Time:* {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}"
+        )
+
+        try:
+            url = f"https://api.telegram.org/bot{self.tg_bot_token}/sendMessage"
+            payload = json.dumps({
+                "chat_id": self.tg_chat_id,
+                "text": text,
+                "parse_mode": "Markdown"
+            }).encode("utf-8")
+            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                logger.success(f"[AutoRedeem] 📱 Telegram READY alert sent for [{alias}] on {streamer} ({cost:,} pts)")
+        except Exception as e:
+            logger.error(f"[AutoRedeem] Failed to send Telegram READY alert: {e}")
+
+    def send_telegram_notification(self, reward_title: str, cost: int, streamer: str, hero_alias: str, msg: str = ""):
+        """Sends an instant receipt when a reward has been successfully redeemed."""
+        if not self.tg_bot_token or not self.tg_chat_id:
+            return
+
+        text = (
+            f"🎉 *KICK REWARD REDEEMED SUCCESSFULLY!*\n\n"
             f"🏆 *Reward:* {reward_title}\n"
             f"💰 *Cost:* {cost:,} Points\n"
             f"📺 *Streamer:* `{streamer}`\n"
@@ -84,15 +127,16 @@ class MasterAutoRedeem:
             }).encode("utf-8")
             req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=5) as resp:
-                logger.success(f"[AutoRedeem] 📱 Telegram redeem alert sent to {self.tg_chat_id}")
+                logger.success(f"[AutoRedeem] 📱 Telegram REDEEMED receipt sent to {self.tg_chat_id}")
         except Exception as e:
-            logger.error(f"[AutoRedeem] Failed to send Telegram alert: {e}")
+            logger.error(f"[AutoRedeem] Failed to send Telegram REDEEMED alert: {e}")
 
     def fetch_streamer_rewards(self, streamer: str) -> List[Dict[str, Any]]:
         url = f"https://kick.com/api/v2/channels/{streamer}/rewards"
         try:
             from curl_cffi import requests
-            proxies = {"http": self.hero_proxy, "https": self.hero_proxy} if self.hero_proxy else None
+            proxy = self.hero_proxy
+            proxies = {"http": proxy, "https": proxy} if proxy else None
             sess = requests.Session(impersonate="chrome120", proxies=proxies)
             resp = sess.get(url, timeout=10)
             if resp.status_code == 200:
@@ -110,15 +154,31 @@ class MasterAutoRedeem:
         text = f"{title} {desc}"
         return any(k in text for k in self.target_keywords)
 
-    def execute_redeem(self, streamer: str, reward: Dict[str, Any]) -> Dict[str, Any]:
-        if not self.hero_token:
-            return {"status": "error", "message": "Hero token not configured"}
+    def execute_redeem(
+        self,
+        streamer: str,
+        reward: Dict[str, Any],
+        account_alias: Optional[str] = None,
+        account_token: Optional[str] = None,
+        account_proxy: Optional[str] = None
+    ) -> Dict[str, Any]:
+        alias = account_alias or self.hero_alias
+        token = account_token or self.hero_token
+        proxy = account_proxy or self.hero_proxy
+
+        # Lookup in hero_accounts map if not explicitly passed
+        if (not token or not alias) and alias in self.hero_accounts:
+            token = self.hero_accounts[alias].get("token")
+            proxy = self.hero_accounts[alias].get("proxy") or proxy
+
+        if not token:
+            return {"status": "error", "message": f"Token for [{alias}] not configured"}
 
         reward_id = reward.get("id")
         reward_title = reward.get("title", "Reward")
         cost = reward.get("cost", 0)
 
-        cache_key = f"{streamer}:{reward_id}"
+        cache_key = f"{streamer}:{reward_id}:{alias}"
         if time.time() - self.redeemed_cache.get(cache_key, 0) < self.cooldown_seconds:
             return {"status": "cooldown", "message": "Reward on cooldown"}
 
@@ -133,10 +193,10 @@ class MasterAutoRedeem:
 
         try:
             from curl_cffi import requests
-            proxies = {"http": self.hero_proxy, "https": self.hero_proxy} if self.hero_proxy else None
+            proxies = {"http": proxy, "https": proxy} if proxy else None
             sess = requests.Session(impersonate="chrome120", proxies=proxies)
             headers = {
-                "Authorization": f"Bearer {self.hero_token}",
+                "Authorization": f"Bearer {token}",
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "Origin": "https://kick.com",
@@ -146,6 +206,7 @@ class MasterAutoRedeem:
             if resp.status_code in (200, 201):
                 self.redeemed_cache[cache_key] = time.time()
                 record = {
+                    "account": alias,
                     "streamer": streamer,
                     "reward_title": reward_title,
                     "cost": cost,
@@ -154,55 +215,76 @@ class MasterAutoRedeem:
                     "status": "SUCCESS"
                 }
                 self.redemption_history.insert(0, record)
-                logger.success(f"🎉 [AutoRedeem] SUCCESS! Redeemed '{reward_title}' ({cost:,} pts) on {streamer} for Hero {self.hero_alias}!")
+                logger.success(f"🎉 [AutoRedeem] SUCCESS! Redeemed '{reward_title}' ({cost:,} pts) on {streamer} for [{alias}]!")
                 
                 # Send instant Telegram notification
-                self.send_telegram_notification(reward_title, cost, streamer, self.hero_alias, msg)
+                self.send_telegram_notification(reward_title, cost, streamer, alias, msg)
                 
-                return {"status": "success", "reward": reward_title, "cost": cost}
+                return {"status": "success", "reward": reward_title, "cost": cost, "account": alias}
             else:
-                logger.warning(f"[AutoRedeem] HTTP {resp.status_code} redeeming '{reward_title}': {resp.text}")
+                logger.warning(f"[AutoRedeem] HTTP {resp.status_code} redeeming '{reward_title}' for [{alias}]: {resp.text}")
                 return {"status": "error", "code": resp.status_code, "message": resp.text}
         except Exception as e:
-            logger.error(f"[AutoRedeem] Error redeeming '{reward_title}': {e}")
+            logger.error(f"[AutoRedeem] Error redeeming '{reward_title}' for [{alias}]: {e}")
             return {"status": "error", "message": str(e)}
 
-    async def check_hero_points_and_redeem(self, hero_points: int) -> List[Dict[str, Any]]:
-        if not self.enabled or not self.hero_token:
-            return []
+    async def scan_and_redeem_all_heroes(self, heroes_points_map: Dict[str, Dict[str, int]], target_streamers: List[str]):
+        """
+        Scans all 10 Hero accounts against all target streamers.
+        1. Checks if points are ready to redeem and sends Telegram notification.
+        2. Auto-redeems if enabled.
+        """
+        if not self.enabled:
+            return
 
-        rewards = await asyncio.to_thread(self.fetch_streamer_rewards, self.target_streamer)
-        self.available_rewards = rewards
-        results = []
+        for streamer in target_streamers:
+            rewards = await asyncio.to_thread(self.fetch_streamer_rewards, streamer)
+            if not rewards:
+                continue
 
-        for r in rewards:
-            cost = r.get("cost", 0)
-            if hero_points >= cost and self.is_target_reward(r):
-                logger.info(f"🎁 [AutoRedeem] Hero [{self.hero_alias}] qualifies for '{r.get('title')}' ({cost:,} pts, balance: {hero_points:,})")
-                res = await asyncio.to_thread(self.execute_redeem, self.target_streamer, r)
-                results.append(res)
-                if res.get("status") == "success":
-                    hero_points -= cost
-                    if hero_points <= 0:
-                        break
-        return results
+            target_rews = [r for r in rewards if self.is_target_reward(r)]
+            if not target_rews:
+                continue
 
-    async def run_loop(self, get_hero_points_callback):
-        """Periodic background check for available rewards."""
-        logger.info(f"🎁 Auto-Redeem Engine active: monitoring rewards for '{self.target_streamer}'")
+            for r in target_rews:
+                cost = r.get("cost", 0)
+                reward_id = r.get("id")
+                reward_title = r.get("title", "Reward")
+
+                for alias, h_info in self.hero_accounts.items():
+                    st_pts = heroes_points_map.get(alias, {}).get(streamer, 0)
+                    if st_pts >= cost and cost > 0:
+                        # 1. Check ready alert cooldown
+                        alert_key = f"ready:{alias}:{streamer}:{reward_id}"
+                        last_alert = self.ready_alerted_cache.get(alert_key, 0)
+                        if time.time() - last_alert > self.ready_alert_cooldown:
+                            self.ready_alerted_cache[alert_key] = time.time()
+                            logger.info(f"🔔 [AutoRedeem] Points READY for [{alias}] on {streamer}: '{reward_title}' ({cost:,} pts, balance={st_pts:,})")
+                            self.send_telegram_ready_alert(alias, streamer, reward_title, cost, st_pts)
+
+                        # 2. Attempt redemption
+                        token = h_info.get("token")
+                        proxy = h_info.get("proxy")
+                        res = await asyncio.to_thread(
+                            self.execute_redeem,
+                            streamer, r, alias, token, proxy
+                        )
+                        if res.get("status") == "success":
+                            # Deduct points locally to avoid double redeem in same cycle
+                            heroes_points_map[alias][streamer] = max(0, st_pts - cost)
+
+    async def run_loop(self, get_heroes_data_callback, get_streamers_callback):
+        """Periodic background loop scanning all 10 Heroes across all streamers."""
+        logger.info(f"🎁 Multi-Hero Auto-Redeem Engine active: monitoring {len(self.hero_accounts)} Hero accounts")
         await asyncio.sleep(5)
         while not self._is_stopped:
             try:
-                # Always refresh rewards list
-                rewards = await asyncio.to_thread(self.fetch_streamer_rewards, self.target_streamer)
-                if rewards:
-                    self.available_rewards = rewards
-
-                hero_pts = await get_hero_points_callback()
-                if hero_pts and hero_pts > 0:
-                    await self.check_hero_points_and_redeem(hero_pts)
+                heroes_data = await get_heroes_data_callback()
+                streamers = await get_streamers_callback()
+                if heroes_data and streamers:
+                    await self.scan_and_redeem_all_heroes(heroes_data, streamers)
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.debug(f"[AutoRedeem] Loop notice: {e}")
-            await asyncio.sleep(300)  # Check every 5 minutes
+                logger.debug(f"[AutoRedeem] Scan loop notice: {e}")
+            await asyncio.sleep(120)  # Check every 2 minutes
