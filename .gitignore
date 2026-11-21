@@ -26,3 +26,15 @@ serv00_sanitized.json
 upload_sanitized_serv00.py
 upload_serv00_clean.py
 verify_panel.py
+
+apply_account_distribution.py
+distribute_accounts.py
+check_acc_streamers.py
+push_rock_solid_update.py
+check_deploy_times.py
+cancel_blocked_deploys.py
+verify_miner34.py
+
+verify_miner2_breakdown.py
+inspect_queued_deploys.py
+update_miner2_accounts_streamers.py

@@ -2,83 +2,91 @@
   "MasterPanel": {
     "host": "0.0.0.0",
     "port": 8080,
-    "debug": false,
-    "secret_key": "kick_master_panel_2026"
+    "debug": false
   },
   "TargetStreamers": [
+    "soulaman",
     "xyroplayzz"
   ],
-  "AutoChat": {
+  "CrossBet": {
     "enabled": true,
-    "target_streamer": "xyroplayzz",
-    "min_interval_seconds": 35,
-    "max_interval_seconds": 65
+    "hero_alias": "4 valo 01",
+    "hero_token": "457580269|dGd5X4LHsmuS0B0CwayArlmOjoshIllkKkVdojl7",
+    "hero_proxy": "http://uyvvrfzo:62mshoyu0jet@38.154.185.97:6370",
+    "hero_bet_pct": 0.30,
+    "feeder_bet_pct": 0.50,
+    "max_hero_bet": 15000,
+    "max_feeder_bet": 5000,
+    "min_consensus_pct": 55.0,
+    "streamers": [
+      "soulaman",
+      "xyroplayzz"
+    ]
+  },
+  "AutoRedeem": {
+    "enabled": true,
+    "target_streamer": "soulaman",
+    "target_keywords": [
+      "badge",
+      "jersey",
+      "highlight",
+      "vp",
+      "valorant"
+    ],
+    "hero_alias": "4 valo 01",
+    "hero_token": "457580269|dGd5X4LHsmuS0B0CwayArlmOjoshIllkKkVdojl7",
+    "hero_proxy": "http://uyvvrfzo:62mshoyu0jet@38.154.185.97:6370",
+    "input_message": "Insta: _.nand._.patel._ | Discord: nandpatel2758"
   },
   "Workers": [
     {
-      "id": "worker-1",
-      "name": "Serv00 S16",
-      "api_url": "http://s16.serv00.com:9645",
-      "ssh_host": "s16.serv00.com",
-      "ssh_user": "Nandpatel",
-      "ssh_pass": "Nandpatel0912",
-      "remote_dir": "/usr/home/Nandpatel/miner",
-      "enabled": true
-    },
-    {
-      "id": "worker-2",
-      "name": "Render Miner-2",
+      "id": "miner-2",
+      "name": "Miner 2 (Untouched Core)",
       "api_url": "https://miner-2-dl7d.onrender.com",
+      "readonly": true,
       "enabled": true
     },
     {
-      "id": "worker-3",
-      "name": "Render Miner-3",
+      "id": "miner-3",
+      "name": "Miner 3 (Singapore)",
       "api_url": "https://miner-3-1.onrender.com",
+      "readonly": false,
       "enabled": true
     },
     {
-      "id": "worker-4",
-      "name": "Render Miner-4",
+      "id": "miner-4",
+      "name": "Miner 4 (Frankfurt)",
       "api_url": "https://miner-4.onrender.com",
+      "readonly": false,
       "enabled": true
     },
     {
-      "id": "worker-5",
-      "name": "Render Miner-5",
+      "id": "miner-5",
+      "name": "Miner 5 (Oregon)",
       "api_url": "https://miner-5-y5rn.onrender.com",
+      "readonly": false,
       "enabled": true
     },
     {
-      "id": "worker-6",
-      "name": "Render Miner-6",
+      "id": "miner-6",
+      "name": "Miner 6 (Ohio)",
       "api_url": "https://miner-6.onrender.com",
+      "readonly": false,
       "enabled": true
     },
     {
-      "id": "worker-7",
-      "name": "Render Miner-7",
+      "id": "miner-7",
+      "name": "Miner 7 (Virginia)",
       "api_url": "https://miner-7.onrender.com",
+      "readonly": false,
       "enabled": true
     },
     {
-      "id": "worker-8",
-      "name": "Render Miner-8",
+      "id": "miner-8",
+      "name": "Miner 8 (Frankfurt)",
       "api_url": "https://miner-8.onrender.com",
+      "readonly": false,
       "enabled": true
     }
-  ],
-  "VisionAI": {
-    "enabled": true,
-    "api_key": "AQ.Ab8RN6JJd33ErbavrTuBagM_tviWM4fj5hwCKdbislLqw_HMhg",
-    "interval_seconds": 90,
-    "auto_dispatch_comments": false,
-    "min_comment_interval": 35,
-    "max_comment_interval": 65
-  },
-  "Telegram": {
-    "enabled": true,
-    "bot_token": "8628064503:AAH5m4o2768Ww6P5q8n0P_8L13pPsp2f3Yk",
-    "allowed_users": [1333122348]
-  }
+  ]
 }
