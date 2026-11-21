@@ -150,7 +150,7 @@
       "keyboard",
       "earphone",
       "headset",
-      "kulakl\u0131k",
+      "kulaklık",
       "klavye",
       "mic",
       "monitor",
@@ -281,7 +281,7 @@
   ],
   "Telegram": {
     "enabled": true,
-    "bot_token": "9139027889:AAFqdc3lsAYDH-9MEByjZlIdR6-KGbaBRhw",
+    "bot_token": "8884953971:AAFeUlSDX6U4fpmNQHfoqMI4PXzXtlRI5CU",
     "chat_id": "6181084198"
   }
 }
