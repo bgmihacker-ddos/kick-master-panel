@@ -53,10 +53,7 @@ class MasterAutoRedeem:
 
     def fetch_streamer_rewards(self, streamer: str) -> List[Dict[str, Any]]:
         url = f"https://kick.com/api/v2/channels/{streamer}/rewards"
-        handlers = []
-        if self.hero_proxy:
-            handlers.append(urllib.request.ProxyHandler({"http": self.hero_proxy, "https": self.hero_proxy}))
-        opener = urllib.request.build_opener(*handlers)
+        # 1. Try direct first (Kick rewards endpoint is public)
         req = urllib.request.Request(
             url,
             headers={
@@ -65,12 +62,22 @@ class MasterAutoRedeem:
             }
         )
         try:
-            with opener.open(req, timeout=8) as resp:
+            with urllib.request.urlopen(req, timeout=6) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 return data.get("data", [])
-        except Exception as e:
-            logger.debug(f"[AutoRedeem] Failed fetching rewards for {streamer}: {e}")
-            return []
+        except Exception:
+            pass
+
+        # 2. Try with proxy if configured
+        if self.hero_proxy:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": self.hero_proxy, "https": self.hero_proxy}))
+            try:
+                with opener.open(req, timeout=8) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    return data.get("data", [])
+            except Exception as e:
+                logger.debug(f"[AutoRedeem] Failed fetching rewards with proxy for {streamer}: {e}")
+        return []
 
     def is_target_reward(self, reward: Dict[str, Any]) -> bool:
         if not reward.get("is_enabled", True) or reward.get("is_paused", False):
@@ -165,9 +172,14 @@ class MasterAutoRedeem:
     async def run_loop(self, get_hero_points_callback):
         """Periodic background check for available rewards."""
         logger.info(f"🎁 Auto-Redeem Engine active: monitoring rewards for '{self.target_streamer}'")
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
         while not self._is_stopped:
             try:
+                # Always refresh rewards list
+                rewards = await asyncio.to_thread(self.fetch_streamer_rewards, self.target_streamer)
+                if rewards:
+                    self.available_rewards = rewards
+
                 hero_pts = await get_hero_points_callback()
                 if hero_pts and hero_pts > 0:
                     await self.check_hero_points_and_redeem(hero_pts)
@@ -175,4 +187,4 @@ class MasterAutoRedeem:
                 break
             except Exception as e:
                 logger.debug(f"[AutoRedeem] Loop notice: {e}")
-            await asyncio.sleep(600)  # Check every 10 minutes
+            await asyncio.sleep(300)  # Check every 5 minutes
