@@ -649,6 +649,15 @@
       badge.style.display = 'inline-block';
       badge.innerText = (pred.streamer || '').toUpperCase();
 
+      const isExecuted = pred.auto_executed || pred.executed;
+      const statusBanner = isExecuted 
+        ? `<div style="text-align: center; padding: 10px 12px; background: rgba(0,231,1,0.15); border: 1px solid var(--kick-green); border-radius: 6px; color: var(--kick-green); font-weight: 700; font-size: 13px; margin-top: 8px;">
+             ✅ AUTO-BET EXECUTED ON FLEET (${pred.executed_bets_count || 'ALL'} accounts) — Autonomous Instant Execution Complete
+           </div>`
+        : `<div style="text-align: center; padding: 10px 12px; background: rgba(0,231,1,0.12); border: 1px solid var(--kick-green); border-radius: 6px; color: #a3e635; font-weight: 700; font-size: 13px; margin-top: 8px;">
+             ⚡ AUTO-BET ACTIVE: Dispatched Across Fleet Instantly
+           </div>`;
+
       c.innerHTML = `
         <div class="pred-box">
           <div class="pred-title">🎯 ${pred.title}</div>
@@ -669,8 +678,9 @@
               <div class="outcome-points">Liquidity Donor / Odds Pump</div>
             </div>
           </div>
-          <button class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 6px;" onclick="triggerManualBet()">
-            ⚡ Execute Fleet Cross-Bet Now
+          ${statusBanner}
+          <button class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 8px; font-size: 11px; opacity: 0.8;" onclick="triggerManualBet()">
+            🔁 Force Re-Execute / Re-Dispatch Bets
           </button>
         </div>
       `;

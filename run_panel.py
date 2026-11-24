@@ -46,21 +46,21 @@ def load_config() -> dict:
     return cfg
 
 
-async def render_keepalive_pinger_task(workers: list, interval_seconds: int = 300):
+async def render_keepalive_pinger_task(workers: list, interval_seconds: int = 120):
     """
     Anti-Sleep Cross-Pinger:
-    Every 5 minutes, pings all worker endpoints AND Master Panel itself
-    to prevent Render's 15-minute free-tier inactivity sleep.
+    Every 2 minutes, pings all worker endpoints AND Master Panel itself
+    to prevent Render's 15-minute free-tier inactivity sleep and ensure continuous mining.
     """
     logger.info(f"💓 Render Anti-Sleep Mesh active (pinging {len(workers) + 1} endpoints every {interval_seconds}s)")
-    await asyncio.sleep(15)
+    await asyncio.sleep(10)
     import aiohttp
 
     self_url = os.environ.get("RENDER_EXTERNAL_URL") or "https://kick-master-panel-pwz6.onrender.com"
 
     while True:
         try:
-            timeout = aiohttp.ClientTimeout(total=15)
+            timeout = aiohttp.ClientTimeout(total=10)
             headers = {"User-Agent": "Mozilla/5.0 KickAntiSleepMesh/1.0"}
             async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
                 # 1. Ping self to ensure master panel stays awake
@@ -70,10 +70,10 @@ async def render_keepalive_pinger_task(workers: list, interval_seconds: int = 30
                 except Exception as err:
                     logger.debug(f"[AntiSleep] Self-ping notice: {err}")
 
-                # 2. Ping all miner nodes
+                # 2. Ping all miner nodes (/api/accounts keeps them warm and active)
                 for w in workers:
                     try:
-                        async with session.get(f"{w.api_url}/health") as resp:
+                        async with session.get(f"{w.api_url}/api/accounts") as resp:
                             logger.debug(f"[AntiSleep] Ping {w.name} -> {resp.status}")
                     except Exception as err:
                         logger.debug(f"[AntiSleep] Ping notice for {w.name}: {err}")
@@ -84,7 +84,7 @@ async def render_keepalive_pinger_task(workers: list, interval_seconds: int = 30
             break
         except Exception as e:
             logger.debug(f"[AntiSleep] Loop notice: {e}")
-            await asyncio.sleep(30)
+            await asyncio.sleep(20)
 
 
 async def main():
@@ -145,8 +145,8 @@ async def main():
     )
     await panel_server.start()
 
-    # 4. Start Render Anti-Sleep Cross-Pinger Mesh (every 5 minutes)
-    keepalive_task = asyncio.create_task(render_keepalive_pinger_task(workers, interval_seconds=300))
+    # 4. Start Render Anti-Sleep Cross-Pinger Mesh (every 2 minutes)
+    keepalive_task = asyncio.create_task(render_keepalive_pinger_task(workers, interval_seconds=120))
 
     logger.success("✅ Master Panel fully operational!")
     logger.info(f"Dashboard: http://localhost:{panel_port}")
