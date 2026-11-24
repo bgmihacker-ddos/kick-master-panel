@@ -544,7 +544,10 @@
         <div class="section-title" style="margin-bottom: 0;">
           👥 Fleet Accounts (<span id="tableAccCount">0</span>)
         </div>
-        <input type="text" class="search-input" id="searchAccounts" placeholder="🔍 Search alias, miner node, or streamer..." oninput="filterAccounts()">
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="text" class="search-input" id="searchAccounts" placeholder="🔍 Search alias, miner node, or streamer..." oninput="filterAccounts()">
+          <button class="btn btn-secondary" onclick="fetchAccounts(true)" style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">🔄 Refresh Accounts</button>
+        </div>
       </div>
       <table>
         <thead>
@@ -572,13 +575,29 @@
 
   <script>
     let allAccountsData = [];
+    let isFetchingAccounts = false;
 
-    async function refreshData() {
+    async function fetchAccounts(force = false) {
+      if (isFetchingAccounts) return;
+      isFetchingAccounts = true;
       try {
-        const [statsRes, accsRes] = await Promise.all([
-          fetch('/api/stats').then(r => r.json()),
-          fetch('/api/accounts').then(r => r.json())
-        ]);
+        const accsRes = await fetch('/api/accounts').then(r => r.json());
+        allAccountsData = accsRes.accounts || [];
+        document.getElementById('tableAccCount').innerText = allAccountsData.length;
+        filterAccounts();
+      } catch (e) {
+        console.error('Accounts fetch error:', e);
+      } finally {
+        isFetchingAccounts = false;
+      }
+    }
+
+    async function fetchStats() {
+      // Pause polling if user has minimized or switched tabs to save Render free bandwidth!
+      if (document.hidden) return;
+
+      try {
+        const statsRes = await fetch('/api/stats').then(r => r.json());
 
         // 1. Update stats banner
         document.getElementById('statTotalPoints').innerText = (statsRes.total_fleet_points || 0).toLocaleString();
@@ -601,13 +620,8 @@
         // 4.5 Render auto redeem
         renderRewards(statsRes.auto_redeem);
 
-        // 5. Render accounts
-        allAccountsData = accsRes.accounts || [];
-        document.getElementById('tableAccCount').innerText = allAccountsData.length;
-        filterAccounts();
-
       } catch (e) {
-        console.error('Refresh error:', e);
+        console.error('Stats refresh error:', e);
       }
     }
 
@@ -826,7 +840,7 @@
         const res = await fetch('/api/bet/trigger', { method: 'POST' }).then(r => r.json());
         if (res.success) {
           alert('🚀 Fleet cross-bet triggered successfully!');
-          refreshData();
+          fetchStats();
         } else {
           alert('Note: ' + (res.error || 'Could not execute bet'));
         }
@@ -835,9 +849,23 @@
       }
     }
 
-    // Refresh every 4 seconds
-    refreshData();
-    setInterval(refreshData, 4000);
+    // Initial load: fetch live stats summary and account table once
+    fetchStats();
+    fetchAccounts();
+
+    // Bandwidth Optimization:
+    // 1. Stats summary (tiny 0.8KB) updates every 8 seconds
+    setInterval(fetchStats, 8000);
+
+    // 2. Full account table (128KB payload) updates every 2 minutes or upon manual click
+    setInterval(() => {
+      if (!document.hidden) fetchAccounts();
+    }, 120000);
+
+    // 3. Auto-refresh stats immediately when user switches focus back to this tab
+    window.addEventListener('focus', () => {
+      fetchStats();
+    });
   </script>
 </body>
 </html>

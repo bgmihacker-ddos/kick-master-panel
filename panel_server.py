@@ -64,7 +64,9 @@ class PanelServer:
         if os.path.exists(tpl_path):
             with open(tpl_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            return web.Response(text=content, content_type="text/html")
+            resp = web.Response(text=content, content_type="text/html")
+            resp.enable_compression()
+            return resp
         return web.Response(text="index.html not found", status=404)
 
     async def handle_get_stats(self, request: web.Request) -> web.Response:
@@ -93,7 +95,7 @@ class PanelServer:
             "available_rewards": self.auto_redeem_engine.available_rewards if self.auto_redeem_engine else []
         }
 
-        return web.json_response({
+        resp = web.json_response({
             "workers": worker_statuses,
             "target_streamers": self.target_streamers,
             "total_fleet_points": total_fleet_points,
@@ -104,6 +106,8 @@ class PanelServer:
             "bet_history": history,
             "auto_redeem": auto_redeem_info
         })
+        resp.enable_compression()
+        return resp
 
     async def handle_get_accounts(self, request: web.Request) -> web.Response:
         tasks = [w.fetch_accounts() for w in self.workers]
@@ -112,7 +116,9 @@ class PanelServer:
         for accs in results:
             if isinstance(accs, list):
                 all_accounts.extend(accs)
-        return web.json_response({"accounts": all_accounts})
+        resp = web.json_response({"accounts": all_accounts})
+        resp.enable_compression()
+        return resp
 
     async def handle_get_prediction(self, request: web.Request) -> web.Response:
         pred = self.cross_bet_engine.active_prediction if self.cross_bet_engine else None

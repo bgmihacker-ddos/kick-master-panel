@@ -70,10 +70,10 @@ async def render_keepalive_pinger_task(workers: list, interval_seconds: int = 12
                 except Exception as err:
                     logger.debug(f"[AntiSleep] Self-ping notice: {err}")
 
-                # 2. Ping all miner nodes (/api/accounts keeps them warm and active)
+                # 2. Ping all miner nodes (/health returns tiny 2 bytes, saving outbound bandwidth)
                 for w in workers:
                     try:
-                        async with session.get(f"{w.api_url}/api/accounts") as resp:
+                        async with session.get(f"{w.api_url}/health") as resp:
                             logger.debug(f"[AntiSleep] Ping {w.name} -> {resp.status}")
                     except Exception as err:
                         logger.debug(f"[AntiSleep] Ping notice for {w.name}: {err}")

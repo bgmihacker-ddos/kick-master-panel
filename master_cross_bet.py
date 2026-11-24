@@ -36,7 +36,7 @@ class MasterCrossBetEngine:
         ])
         self.hero_accounts_map = self.config.get("hero_accounts", {})
         self.hero_token = self.config.get("hero_token")
-        self.hero_proxy = self.config.get("hero_proxy", "socks5://dgahzbnp:1of7tb79sruk@45.38.107.97:6014")
+        self.hero_proxy = None
         self.hero_bet_pct = float(self.config.get("hero_bet_pct", 0.35))
         self.feeder_bet_pct = float(self.config.get("feeder_bet_pct", 0.50))
         self.max_hero_bet = int(self.config.get("max_hero_bet", 15000))
@@ -55,30 +55,22 @@ class MasterCrossBetEngine:
         self._is_stopped = False
 
     def fetch_streamer_prediction(self, streamer: str) -> Optional[Dict[str, Any]]:
-        """Fetch latest prediction payload directly from Kick API using curl_cffi with proxy fallback."""
+        """Fetch latest prediction payload directly from Kick API using curl_cffi (No proxy)."""
         url = f"https://kick.com/api/v2/channels/{streamer}/predictions/latest"
-        proxies_to_try = [
-            self.hero_proxy,
-            "socks5://dgahzbnp:1of7tb79sruk@45.38.107.97:6014",
-            "socks5://rmoxugty:9zur215td743@45.38.107.97:6014",
-            None  # Direct fallback
-        ]
         from curl_cffi import requests
-        for p in proxies_to_try:
-            try:
-                proxies = {"http": p, "https": p} if p else None
-                sess = requests.Session(impersonate="chrome120", proxies=proxies)
-                sess.headers.update({
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Accept": "application/json, text/plain, */*",
-                    "Origin": "https://kick.com",
-                    "Referer": f"https://kick.com/{streamer}"
-                })
-                resp = sess.get(url, timeout=5)
-                if resp.status_code == 200:
-                    return resp.json()
-            except Exception:
-                continue
+        try:
+            sess = requests.Session(impersonate="chrome120")
+            sess.headers.update({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Origin": "https://kick.com",
+                "Referer": f"https://kick.com/{streamer}"
+            })
+            resp = sess.get(url, timeout=5)
+            if resp.status_code == 200:
+                return resp.json()
+        except Exception:
+            pass
         return None
 
     def parse_prediction(self, raw_data: Any) -> Optional[Dict[str, Any]]:
