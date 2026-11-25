@@ -243,6 +243,8 @@ class MasterAutoRedeem:
                 continue
 
             target_rews = [r for r in rewards if self.is_target_reward(r)]
+            if streamer == self.target_streamer or not self.available_rewards:
+                self.available_rewards = target_rews if target_rews else rewards
             if not target_rews:
                 continue
 

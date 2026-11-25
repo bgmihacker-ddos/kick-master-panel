@@ -119,28 +119,74 @@ class MasterCrossBetEngine:
             "raw": pred
         }
 
+    def _resolve_standard_prediction(self, outcomes: List[Dict[str, Any]], total_voters: int):
+        sorted_outcomes = sorted(
+            outcomes,
+            key=lambda o: (
+                o.get("vote_count", 0) or o.get("voters_count", 0) or 0,
+                o.get("total_vote_amount", 0) or 0
+            ),
+            reverse=True
+        )
+        outcome_0, outcome_1 = sorted_outcomes[0], sorted_outcomes[1]
+        voters_0 = outcome_0.get("vote_count", 0) or outcome_0.get("voters_count", 0) or 0
+        consensus_pct = (voters_0 / total_voters * 100.0) if total_voters > 0 else 50.0
+
+        if consensus_pct >= self.min_consensus_pct and total_voters >= 5:
+            return outcome_0, outcome_1, "consensus_funnel", consensus_pct
+        else:
+            return outcome_0, outcome_1, "balanced_arbitrage", consensus_pct
+
     def analyze_prediction(self, pred: Dict[str, Any], streamer: str) -> Optional[Dict[str, Any]]:
         outcomes = pred.get("outcomes", [])
         if len(outcomes) < 2:
             return None
 
+        title = (pred.get("title") or "").strip()
+        title_lower = title.lower()
+        streamer_lower = streamer.lower()
+
         total_voters = sum((o.get("vote_count", 0) or o.get("voters_count", 0) or 0) for o in outcomes)
         total_points = sum((o.get("total_vote_amount", 0) or 0) for o in outcomes)
-        is_controlled = (streamer.lower() == "xyroplayzz")
+        is_controlled = (streamer_lower == "xyroplayzz")
 
         if is_controlled:
             out_0, out_1 = outcomes[0], outcomes[1]
             t0 = (out_0.get("title") or "").lower()
             t1 = (out_1.get("title") or "").lower()
-            if "us" in t0 or "win" in t0:
+            if "us" in t0 or "win" in t0 or "yes" in t0:
                 hero_outcome, feeder_outcome = out_0, out_1
-            elif "us" in t1 or "win" in t1:
+            elif "us" in t1 or "win" in t1 or "yes" in t1:
                 hero_outcome, feeder_outcome = out_1, out_0
             else:
                 hero_outcome, feeder_outcome = out_0, out_1
             strategy = "controlled_funnel"
             consensus_pct = 100.0
-        else:
+
+        elif any(br_s in streamer_lower for br_s in ["binks69", "nonstopgaming", "mortal", "s8ul_sid", "hydraflick"]) and \
+             any(kw in title_lower for kw in ["win", "match", "chicken", "winner", "jeetenage", "we dip", "kill", "top 3", "top 5"]):
+            # Battle Royale match outcomes: Streamers lose 80%+ of the time.
+            # Hero bets the statistical winner ('no' / 'nahi' / 'lose' / 'har' / 'dip'), while chat bets 'yes'.
+            out_no = None
+            out_yes = None
+            for o in outcomes:
+                ot = (o.get("title") or "").lower()
+                if any(neg in ot for neg in ["no", "nahi", "nah", "lose", "dip", "har", "out", "dead", "nhi"]):
+                    out_no = o
+                elif any(pos in ot for pos in ["yes", "haan", "win", "live", "chicken"]):
+                    out_yes = o
+
+            if out_no and out_yes:
+                hero_outcome = out_no
+                feeder_outcome = out_yes
+                strategy = "statistical_edge"
+                consensus_pct = 80.0
+            else:
+                hero_outcome, feeder_outcome, strategy, consensus_pct = self._resolve_standard_prediction(outcomes, total_voters)
+
+        elif streamer_lower == "sherlock" or any(kw in title_lower for kw in ["coin", "flip", "heads", "tails", "bo3", "dice", "roll", "odd", "even", "aa", "bb", "lower side", "higher side"]):
+            # 50/50 Coin Flip / Random Dice Gamble: CAPITAL PRESERVATION MODE!
+            # Never risk 35% on a coin flip. Sort outcomes, Hero bets safe capped amount.
             sorted_outcomes = sorted(
                 outcomes,
                 key=lambda o: (
@@ -149,16 +195,13 @@ class MasterCrossBetEngine:
                 ),
                 reverse=True
             )
-            outcome_0, outcome_1 = sorted_outcomes[0], sorted_outcomes[1]
-            voters_0 = outcome_0.get("vote_count", 0) or outcome_0.get("voters_count", 0) or 0
-            consensus_pct = (voters_0 / total_voters * 100.0) if total_voters > 0 else 50.0
+            hero_outcome = sorted_outcomes[0]
+            feeder_outcome = sorted_outcomes[1]
+            strategy = "random_gamble"
+            consensus_pct = 50.0
 
-            if consensus_pct >= self.min_consensus_pct:
-                hero_outcome, feeder_outcome = outcome_0, outcome_1
-                strategy = "consensus_funnel"
-            else:
-                hero_outcome, feeder_outcome = outcome_0, outcome_1
-                strategy = "balanced_arbitrage"
+        else:
+            hero_outcome, feeder_outcome, strategy, consensus_pct = self._resolve_standard_prediction(outcomes, total_voters)
 
         voters_0 = hero_outcome.get("vote_count", 0) or hero_outcome.get("voters_count", 0) or 0
         voters_1 = feeder_outcome.get("vote_count", 0) or feeder_outcome.get("voters_count", 0) or 0
@@ -215,7 +258,7 @@ class MasterCrossBetEngine:
             return
 
         logger.info(
-            f"⚡ Master Cross-Bet Triggered on {streamer} for '{analysis['title']}' ({len(all_accounts)} accounts available)..."
+            f"⚡ Master Cross-Bet Triggered on {streamer} for '{analysis['title']}' [{strategy}] ({len(all_accounts)} accounts available)..."
         )
         self.processed_predictions.add(pred_id)
 
@@ -232,12 +275,31 @@ class MasterCrossBetEngine:
                 f"🏆 Primary Target Hero (Closest to Redeem): [{top_hero['alias']}] with {top_hero.get('actual_pts', 0):,} pts on {streamer}"
             )
 
-        # 1. Multi-Hero Bet Execution (All Hero accounts bet on the winning side to collect points)
+        # 1. Multi-Hero Bet Execution with Strategy-Aware Capital Protection
         for idx, h_acc in enumerate(hero_accs):
             h_alias = h_acc["alias"]
             balance = h_acc.get("actual_pts", 0)
-            bet_pct = self.hero_bet_pct if idx == 0 else max(0.25, self.hero_bet_pct - 0.05)
-            amt = max(10, min(self.max_hero_bet, int(balance * bet_pct))) if balance >= 10 else 10
+
+            if strategy == "controlled_funnel":
+                # 100% win certainty (xyroplayzz): Bet 35% of balance to maximize profit
+                bet_pct = self.hero_bet_pct if idx == 0 else max(0.25, self.hero_bet_pct - 0.05)
+                amt = max(10, min(self.max_hero_bet, int(balance * bet_pct))) if balance >= 10 else 10
+            elif strategy == "statistical_edge":
+                # High edge (BGMI streamer loss): Hero bets 15% (max 1,000 pts) on 'NO'
+                bet_pct = 0.15 if idx == 0 else 0.10
+                amt = max(10, min(1000, int(balance * bet_pct))) if balance >= 10 else 10
+            elif strategy == "consensus_funnel":
+                # Chat consensus (>75%): Hero bets 10% (max 750 pts)
+                bet_pct = 0.10 if idx == 0 else 0.07
+                amt = max(10, min(750, int(balance * bet_pct))) if balance >= 10 else 10
+            elif strategy == "random_gamble":
+                # 50/50 Coin Flip / Dice: CAPITAL PRESERVATION MODE!
+                # STRICTLY CAP HERO BET to 3% of balance (max 150 pts, min 10 pts)
+                # Never bleed thousands of points on a 50/50 coin flip!
+                amt = max(10, min(150, int(balance * 0.03))) if balance >= 10 else 10
+            else:
+                # Balanced arbitrage: conservative 5% (max 250 pts)
+                amt = max(10, min(250, int(balance * 0.05))) if balance >= 10 else 10
 
             logger.info(f"👑 Executing Hero [{h_alias}] bet on '{hero_title}' ({amt:,} pts)...")
             
@@ -282,19 +344,44 @@ class MasterCrossBetEngine:
             balance = acc.get("actual_pts", 0)
             alias = acc["alias"]
 
-            if strategy == "balanced_arbitrage":
-                # 67% feeders pump liquidity on feeder side, 33% hedge on hero side
-                pick_hero_side = (idx % 3 == 0)
-                out_id = hero_id if pick_hero_side else feeder_id
-                out_title = hero_title if pick_hero_side else feeder_title
-                role = "ARBITRAGE_HEDGE" if pick_hero_side else "LIQUIDITY_DONOR"
-                amt = max(10, min(5000, int(balance * 0.25))) if balance >= 10 else 10
-            else:
-                # Controlled / Consensus Funnel: ALL feeders dump points into feeder_id to pump Hero payout!
+            if strategy == "controlled_funnel":
+                # 100% feeders dump into losing side to pump Hero pool
                 out_id = feeder_id
                 out_title = feeder_title
                 role = "FEEDER_DONOR"
                 amt = max(10, min(self.max_feeder_bet, int(balance * self.feeder_bet_pct))) if balance >= 10 else 10
+
+            elif strategy == "statistical_edge":
+                # 80% feeders bet on emotional chat outcome (feeder_id / YES) to pump odds for Hero (NO)
+                # 20% hedge on Hero side
+                pick_hero_side = (idx % 5 == 0)
+                out_id = hero_id if pick_hero_side else feeder_id
+                out_title = hero_title if pick_hero_side else feeder_title
+                role = "ARBITRAGE_HEDGE" if pick_hero_side else "ODDS_PUMP"
+                amt = max(10, min(1000, int(balance * 0.25))) if balance >= 10 else 10
+
+            elif strategy == "random_gamble":
+                # 50/50 split across feeders: Fleet stays delta-neutral
+                pick_hero_side = (idx % 2 == 0)
+                out_id = hero_id if pick_hero_side else feeder_id
+                out_title = hero_title if pick_hero_side else feeder_title
+                role = "COINFLIP_HEDGE_HERO" if pick_hero_side else "COINFLIP_HEDGE_FEEDER"
+                amt = max(10, min(250, int(balance * 0.15))) if balance >= 10 else 10
+
+            elif strategy == "consensus_funnel":
+                # Feeders dump into feeder_id to pump Hero payout
+                out_id = feeder_id
+                out_title = feeder_title
+                role = "FEEDER_DONOR"
+                amt = max(10, min(self.max_feeder_bet, int(balance * self.feeder_bet_pct))) if balance >= 10 else 10
+
+            else:
+                # Balanced arbitrage: 67% feeder outcome, 33% hero outcome
+                pick_hero_side = (idx % 3 == 0)
+                out_id = hero_id if pick_hero_side else feeder_id
+                out_title = hero_title if pick_hero_side else feeder_title
+                role = "ARBITRAGE_HEDGE" if pick_hero_side else "LIQUIDITY_DONOR"
+                amt = max(10, min(500, int(balance * 0.20))) if balance >= 10 else 10
 
             try:
                 res = await acc["worker"].send_bet(alias, streamer, out_id, amt)
@@ -356,10 +443,16 @@ class MasterCrossBetEngine:
             if not analysis:
                 return
 
-            self.active_prediction = analysis
             pred_id = pred_obj["id"]
             if pred_id in self.processed_predictions:
+                analysis["auto_executed"] = True
+                analysis["executed"] = True
+                if self.active_prediction and self.active_prediction.get("prediction_id") == pred_id:
+                    analysis["executed_bets_count"] = self.active_prediction.get("executed_bets_count", 0)
+                self.active_prediction = analysis
                 return
+
+            self.active_prediction = analysis
 
             remaining = pred_obj.get("remaining_seconds", 30)
             if remaining < 2:
