@@ -69,6 +69,8 @@ class MasterAutoRedeem:
         self.tg_chat_id = self.config.get("tg_chat_id", "6181084198")
 
         self.available_rewards: List[Dict[str, Any]] = []
+        self.rewards_cache: Dict[str, tuple] = {}
+        self.rewards_cache_ttl = 1800  # 30 minutes per-streamer cache to avoid Kick 429
         self.redemption_history: List[Dict[str, Any]] = []
         self.redeemed_cache: Dict[str, float] = {}
         self.ready_alerted_cache: Dict[str, float] = {}
@@ -134,7 +136,15 @@ class MasterAutoRedeem:
         except Exception as e:
             logger.error(f"[AutoRedeem] Failed to send Telegram REDEEMED alert: {e}")
 
-    def fetch_streamer_rewards(self, streamer: str) -> List[Dict[str, Any]]:
+    def fetch_streamer_rewards(self, streamer: str, allow_network: bool = True) -> tuple:
+        """Returns (rewards_list, hit_rate_limit) using a 30-minute per-streamer cache."""
+        cached = self.rewards_cache.get(streamer)
+        now = time.time()
+        if cached and (now - cached[0]) < self.rewards_cache_ttl:
+            return cached[1], False
+        if not allow_network:
+            return (cached[1] if cached else []), False
+
         url = f"https://kick.com/api/v2/channels/{streamer}/rewards"
         try:
             from curl_cffi import requests
@@ -146,20 +156,22 @@ class MasterAutoRedeem:
                 "Referer": f"https://kick.com/{streamer}/",
             }
             resp = sess.get(url, headers=headers, timeout=10)
-            if resp.status_code != 200 and self.hero_token:
+            if resp.status_code == 429:
+                logger.warning(f"[RewardNotifier] HTTP 429 rate-limited fetching rewards for {streamer}; pausing uncached fetches")
+                return (cached[1] if cached else []), True
+            if resp.status_code in (401, 403) and self.hero_token:
                 headers["Authorization"] = f"Bearer {self.hero_token}"
                 resp = sess.get(url, headers=headers, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
-                if isinstance(data, dict):
-                    return data.get("data", []) or []
-                if isinstance(data, list):
-                    return data
+                rews = (data.get("data", []) or []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+                self.rewards_cache[streamer] = (now, rews)
+                return rews, False
             else:
-                logger.warning(f"[AutoRedeem] Rewards HTTP {resp.status_code} for {streamer}")
+                logger.warning(f"[RewardNotifier] Rewards HTTP {resp.status_code} for {streamer}")
         except Exception as e:
-            logger.warning(f"[AutoRedeem] Error fetching rewards for {streamer}: {e}")
-        return []
+            logger.warning(f"[RewardNotifier] Error fetching rewards for {streamer}: {e}")
+        return (cached[1] if cached else []), False
 
     def is_target_reward(self, reward: Dict[str, Any]) -> bool:
         if not reward.get("is_enabled", True) or reward.get("is_paused", False):
@@ -256,8 +268,14 @@ class MasterAutoRedeem:
             return
 
         collected_rewards: List[Dict[str, Any]] = []
+        rate_limited = False
         for streamer in target_streamers:
-            rewards = await asyncio.to_thread(self.fetch_streamer_rewards, streamer)
+            was_cached = streamer in self.rewards_cache and (time.time() - self.rewards_cache[streamer][0]) < self.rewards_cache_ttl
+            rewards, hit_429 = await asyncio.to_thread(self.fetch_streamer_rewards, streamer, not rate_limited)
+            if hit_429:
+                rate_limited = True
+            if not was_cached and not hit_429:
+                await asyncio.sleep(1.5)
             if not rewards:
                 continue
 
@@ -305,7 +323,7 @@ class MasterAutoRedeem:
                             if res.get("status") == "success":
                                 heroes_points_map[alias][streamer] = max(0, st_pts - cost)
 
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(0.05)
 
         if collected_rewards:
             self.available_rewards = collected_rewards[:12]
@@ -325,4 +343,4 @@ class MasterAutoRedeem:
                 break
             except Exception as e:
                 logger.debug(f"[AutoRedeem] Scan loop notice: {e}")
-            await asyncio.sleep(120)  # Check every 2 minutes
+            await asyncio.sleep(300)  # Check every 5 minutes (uses 30m rewards cache)
