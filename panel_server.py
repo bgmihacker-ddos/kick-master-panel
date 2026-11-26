@@ -90,6 +90,7 @@ class PanelServer:
         history = self.cross_bet_engine.bet_history if self.cross_bet_engine else []
         auto_redeem_info = {
             "enabled": self.auto_redeem_engine.enabled if self.auto_redeem_engine else False,
+            "notify_only": (not self.auto_redeem_engine.auto_redeem_enabled) if self.auto_redeem_engine else True,
             "target_streamer": self.auto_redeem_engine.target_streamer if self.auto_redeem_engine else "soulaman",
             "history": self.auto_redeem_engine.redemption_history if self.auto_redeem_engine else [],
             "available_rewards": self.auto_redeem_engine.available_rewards if self.auto_redeem_engine else []

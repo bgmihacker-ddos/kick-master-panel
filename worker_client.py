@@ -30,56 +30,46 @@ class WorkerNodeClient:
         }
         self.last_accounts: List[Dict[str, Any]] = []
         self._last_fetch_time: float = 0.0
+        self.cache_ttl: float = 25.0
+
+    def _update_status_from_normalized(self, normalized: List[Dict[str, Any]]):
+        total_pts = 0
+        active_v = 0
+        streamers_seen: Dict[str, bool] = {}
+
+        for a in normalized:
+            total_pts += a.get("total_points", 0)
+            if a.get("is_watching"):
+                active_v += 1
+            for s_name in a.get("watching", []):
+                streamers_seen[s_name] = True
+
+        self.last_status = {
+            "status": "online",
+            "node_id": self.node_id,
+            "name": self.name,
+            "total_accounts": len(normalized),
+            "active_viewers": active_v,
+            "total_points": total_pts,
+            "streamers": streamers_seen,
+            "readonly": self.readonly
+        }
 
     async def fetch_status(self) -> Dict[str, Any]:
-        """Queries the Worker health / status endpoint."""
+        """Queries the Worker health / status endpoint using shared 25s accounts cache."""
         if not self.enabled:
             return {"status": "disabled", "node_id": self.node_id, "name": self.name}
 
         now = time.time()
-        if (now - self._last_fetch_time) < 3.0 and self.last_status.get("status") == "online":
+        if (now - self._last_fetch_time) < self.cache_ttl and self.last_status.get("status") == "online":
             return self.last_status
 
-        # Try /api/accounts to compute live stats directly
-        try:
-            timeout = aiohttp.ClientTimeout(total=4.5)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(f"{self.api_url}/api/accounts") as resp:
-                    if resp.status == 200:
-                        raw_accs = await resp.json()
-                        accounts_list = raw_accs if isinstance(raw_accs, list) else raw_accs.get("accounts", [])
-                        total_pts = 0
-                        active_v = 0
-                        streamers_seen = {}
+        prev_ts = self._last_fetch_time
+        accs = await self.fetch_accounts(force=True)
+        if accs and self._last_fetch_time > prev_ts:
+            return self.last_status
 
-                        for a in accounts_list:
-                            st_map = a.get("streamers", {})
-                            acc_is_watching = False
-                            for s_name, s_info in st_map.items():
-                                pts = s_info.get("points") or 0
-                                total_pts += pts
-                                if s_info.get("watching"):
-                                    acc_is_watching = True
-                                    streamers_seen[s_name] = True
-                            if acc_is_watching or a.get("is_watching"):
-                                active_v += 1
-
-                        self.last_status = {
-                            "status": "online",
-                            "node_id": self.node_id,
-                            "name": self.name,
-                            "total_accounts": len(accounts_list),
-                            "active_viewers": active_v,
-                            "total_points": total_pts,
-                            "streamers": streamers_seen,
-                            "readonly": self.readonly
-                        }
-                        self._last_fetch_time = now
-                        return self.last_status
-        except Exception as e:
-            logger.debug(f"[{self.name}] Status fetch notice: {e}")
-
-        # Fallback to health ping
+        # Fallback to lightweight health ping
         try:
             timeout = aiohttp.ClientTimeout(total=3.0)
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -99,14 +89,19 @@ class WorkerNodeClient:
         self.last_status["readonly"] = self.readonly
         return self.last_status
 
-    async def fetch_accounts(self) -> List[Dict[str, Any]]:
-        """Queries the Worker API /api/accounts endpoint and normalizes account data."""
+    async def fetch_accounts(self, force: bool = False) -> List[Dict[str, Any]]:
+        """Queries the Worker API /api/accounts endpoint with shared 25s cache to save miner bandwidth."""
         if not self.enabled:
             return []
 
+        now = time.time()
+        if not force and self.last_accounts and (now - self._last_fetch_time) < self.cache_ttl:
+            return self.last_accounts
+
         try:
-            timeout = aiohttp.ClientTimeout(total=5.0)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            timeout = aiohttp.ClientTimeout(total=6.0)
+            headers = {"Accept-Encoding": "gzip"}
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
                 url = f"{self.api_url}/api/accounts"
                 async with session.get(url) as resp:
                     if resp.status == 200:
@@ -142,6 +137,8 @@ class WorkerNodeClient:
                                 "readonly": self.readonly
                             })
                         self.last_accounts = normalized
+                        self._update_status_from_normalized(normalized)
+                        self._last_fetch_time = time.time()
                         return self.last_accounts
         except Exception as e:
             logger.debug(f"[{self.name}] Failed to fetch accounts: {e}")

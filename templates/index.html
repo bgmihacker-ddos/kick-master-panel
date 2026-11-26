@@ -522,14 +522,14 @@
       </div>
     </div>
 
-    <!-- AUTO-REDEEM & REWARDS STATUS -->
+    <!-- REWARDS READY NOTIFIER STATUS -->
     <div class="card" style="margin-bottom: 24px;">
       <div class="card-title">
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span>🎁 Channel Point Rewards & Auto-Redeem</span>
-          <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Hero: 4 valo 01</span>
+          <span>🎁 Channel Point Rewards &amp; Ready Notifier</span>
+          <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;" id="redeemModeLabel">Notify-Only (No Auto-Redeem)</span>
         </div>
-        <span class="tag-live" id="autoRedeemBadge">SOULAMAN</span>
+        <span class="tag-live" id="autoRedeemBadge">NOTIFY ONLY</span>
       </div>
       <div id="rewardsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
         <div style="color: var(--text-muted); font-size: 13px; text-align: center; grid-column: 1/-1; padding: 20px 0;">
@@ -664,12 +664,17 @@
       badge.innerText = (pred.streamer || '').toUpperCase();
 
       const isExecuted = pred.auto_executed || pred.executed;
+      const isWaiting = pred.waiting_for_consensus && !isExecuted;
       const statusBanner = isExecuted 
         ? `<div style="text-align: center; padding: 10px 12px; background: rgba(0,231,1,0.15); border: 1px solid var(--kick-green); border-radius: 6px; color: var(--kick-green); font-weight: 700; font-size: 13px; margin-top: 8px;">
-             ✅ AUTO-BET EXECUTED ON FLEET (${pred.executed_bets_count || 'ALL'} accounts) — Autonomous Instant Execution Complete
+             ✅ AUTO-BET EXECUTED ON FLEET (${pred.executed_bets_count || 'ALL'} accounts) — Execution Complete
+           </div>`
+        : isWaiting
+        ? `<div style="text-align: center; padding: 10px 12px; background: rgba(250,204,21,0.12); border: 1px solid #facc15; border-radius: 6px; color: #facc15; font-weight: 700; font-size: 13px; margin-top: 8px;">
+             ⏳ WAITING FOR CHAT CONSENSUS (${pred.total_voters || 0} voters, ${pred.remaining_seconds}s left) — Smart Funnel Active
            </div>`
         : `<div style="text-align: center; padding: 10px 12px; background: rgba(0,231,1,0.12); border: 1px solid var(--kick-green); border-radius: 6px; color: #a3e635; font-weight: 700; font-size: 13px; margin-top: 8px;">
-             ⚡ AUTO-BET ACTIVE: Dispatched Across Fleet Instantly
+             ⚡ SMART AUTO-BET ACTIVE: Dispatched Across Fleet
            </div>`;
 
       c.innerHTML = `
@@ -730,18 +735,37 @@
 
     function renderRewards(autoRedeemData) {
       const grid = document.getElementById('rewardsGrid');
+      const modeLbl = document.getElementById('redeemModeLabel');
+      const badgeEl = document.getElementById('autoRedeemBadge');
+      if (modeLbl && autoRedeemData) {
+        modeLbl.innerText = autoRedeemData.notify_only !== false ? 'Notify-Only (No Auto-Redeem)' : 'Auto-Redeem Active';
+      }
+      if (badgeEl && autoRedeemData) {
+        badgeEl.innerText = autoRedeemData.notify_only !== false ? 'NOTIFY ONLY' : (autoRedeemData.target_streamer || 'SOULAMAN').toUpperCase();
+      }
       if (!grid) return;
       if (!autoRedeemData || !autoRedeemData.available_rewards || autoRedeemData.available_rewards.length === 0) {
         grid.innerHTML = '<div style="color: var(--text-muted); font-size: 12px; text-align: center; grid-column: 1/-1; padding: 15px 0;">No active channel rewards returned from streamer.</div>';
         return;
       }
       grid.innerHTML = '';
-      const heroAcc = allAccountsData.find(a => a.alias === '4 valo 01');
+      const heroAliases = new Set(['Main Account', 'second account', '3 nand 549', '4 valo 01', '5 raju', 'npfc0912', 'n9654', 'n09144', 'reward0912', 'valo02']);
       const targetStreamer = autoRedeemData.target_streamer || 'soulaman';
-      const heroPts = heroAcc ? ((heroAcc.points_by_streamer || {})[targetStreamer] || 0) : 0;
 
       autoRedeemData.available_rewards.forEach(rw => {
-        const canRedeem = heroPts >= rw.cost;
+        const rwStreamer = rw.streamer || targetStreamer;
+        let bestHero = null;
+        let heroPts = 0;
+        allAccountsData.forEach(a => {
+          if (heroAliases.has(a.alias)) {
+            const pts = (a.points_by_streamer || {})[rwStreamer] || 0;
+            if (pts >= heroPts) {
+              heroPts = pts;
+              bestHero = a.alias;
+            }
+          }
+        });
+        const canRedeem = heroPts >= (rw.cost || 0) && (rw.cost || 0) > 0;
         const card = document.createElement('div');
         card.style.background = 'var(--bg-card)';
         card.style.border = canRedeem ? '1px solid var(--kick-green)' : '1px solid var(--border)';
@@ -754,23 +778,20 @@
 
         card.innerHTML = `
           <div>
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
               <span style="font-weight: 700; font-size: 13px; color: ${canRedeem ? 'var(--kick-green)' : 'var(--text-main)'};">
-                ${rw.title}
+                ${rw.title} <span style="font-size: 10px; color: var(--text-dim);">(${rwStreamer})</span>
               </span>
-              <span class="mono bold pts" style="font-size: 12px;">${(rw.cost || 0).toLocaleString()} pts</span>
+              <span class="mono bold pts" style="font-size: 12px; white-space: nowrap;">${(rw.cost || 0).toLocaleString()} pts</span>
             </div>
             <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-              Input: ${rw.is_user_input_required ? 'Required (Insta/Discord)' : 'Instant'}
+              Top Hero: <b>${bestHero || '4 valo 01'}</b> (${heroPts.toLocaleString()} pts) &bull; Input: ${rw.is_user_input_required ? 'Required' : 'Instant'}
             </div>
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
             <span style="font-size: 11px; color: ${canRedeem ? 'var(--kick-green)' : 'var(--text-dim)'}; font-weight: 600;">
-              ${canRedeem ? '✅ ELIGIBLE' : `Hero needs ${((rw.cost || 0) - heroPts).toLocaleString()} pts`}
+              ${canRedeem ? '🔔 READY TO REDEEM' : `Needs ${((rw.cost || 0) - heroPts).toLocaleString()} more pts`}
             </span>
-            <button class="btn ${canRedeem ? 'btn-primary' : 'btn-secondary'}" style="padding: 4px 10px; font-size: 11px;" ${canRedeem ? '' : 'disabled'} onclick='triggerManualRedeem(${JSON.stringify(rw).replace(/'/g, "&apos;")})'>
-              🎁 Redeem
-            </button>
           </div>
         `;
         grid.appendChild(card);
@@ -783,10 +804,11 @@
         const res = await fetch('/api/redeem/trigger', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({reward})
+          body: JSON.stringify({reward, streamer: reward.streamer})
         }).then(r => r.json());
         alert(res.success ? 'Redemption submitted successfully!' : `Redemption notice: ${res.error || res.result?.message}`);
-        refreshData();
+        fetchStats();
+        fetchAccounts(true);
       } catch (e) {
         alert('Error: ' + e);
       }

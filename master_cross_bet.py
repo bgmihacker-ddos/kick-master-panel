@@ -50,6 +50,7 @@ class MasterCrossBetEngine:
         ])
 
         self.processed_predictions = set()
+        self.first_seen_predictions: Dict[str, float] = {}
         self.active_prediction: Optional[Dict[str, Any]] = None
         self.bet_history: List[Dict[str, Any]] = []
         self._is_stopped = False
@@ -99,12 +100,14 @@ class MasterCrossBetEngine:
 
         duration = int(pred.get("duration", 60) or 60)
         remaining = duration
+        elapsed_secs: Optional[int] = None
 
         created_at_str = pred.get("created_at")
         if created_at_str:
             try:
                 dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
-                elapsed = (datetime.now(timezone.utc) - dt).total_seconds()
+                elapsed = max(0.0, (datetime.now(timezone.utc) - dt).total_seconds())
+                elapsed_secs = int(elapsed)
                 remaining = max(0, int(duration - elapsed))
             except Exception:
                 pass
@@ -114,6 +117,7 @@ class MasterCrossBetEngine:
             "title": pred.get("title", "Prediction"),
             "state": state,
             "duration": duration,
+            "elapsed_seconds": elapsed_secs,
             "remaining_seconds": remaining,
             "outcomes": outcomes,
             "raw": pred
@@ -132,7 +136,7 @@ class MasterCrossBetEngine:
         voters_0 = outcome_0.get("vote_count", 0) or outcome_0.get("voters_count", 0) or 0
         consensus_pct = (voters_0 / total_voters * 100.0) if total_voters > 0 else 50.0
 
-        if consensus_pct >= self.min_consensus_pct and total_voters >= 5:
+        if consensus_pct >= self.min_consensus_pct and total_voters >= 10:
             return outcome_0, outcome_1, "consensus_funnel", consensus_pct
         else:
             return outcome_0, outcome_1, "balanced_arbitrage", consensus_pct
@@ -164,7 +168,7 @@ class MasterCrossBetEngine:
             consensus_pct = 100.0
 
         elif any(br_s in streamer_lower for br_s in ["binks69", "nonstopgaming", "mortal", "s8ul_sid", "hydraflick"]) and \
-             any(kw in title_lower for kw in ["win", "match", "chicken", "winner", "jeetenage", "we dip", "kill", "top 3", "top 5"]):
+             any(kw in title_lower for kw in ["win", "match", "chicken", "winner", "jeetenage", "we dip", "kill", "top 3", "top 5", "wwcd", "booyah"]):
             # Battle Royale match outcomes: Streamers lose 80%+ of the time.
             # Hero bets the statistical winner ('no' / 'nahi' / 'lose' / 'har' / 'dip'), while chat bets 'yes'.
             out_no = None
@@ -236,9 +240,9 @@ class MasterCrossBetEngine:
         feeder_id = analysis["feeder_outcome_id"]
         feeder_title = analysis["feeder_outcome_title"]
 
-        # Parallel fetch accounts across all workers
+        # Parallel fetch fresh accounts across all workers right before placing bets
         all_accounts = []
-        worker_acc_lists = await asyncio.gather(*[w.fetch_accounts() for w in self.workers], return_exceptions=True)
+        worker_acc_lists = await asyncio.gather(*[w.fetch_accounts(force=True) for w in self.workers], return_exceptions=True)
         for idx, accs in enumerate(worker_acc_lists):
             if isinstance(accs, list):
                 w = self.workers[idx]
@@ -289,9 +293,15 @@ class MasterCrossBetEngine:
                 bet_pct = 0.15 if idx == 0 else 0.10
                 amt = max(10, min(1000, int(balance * bet_pct))) if balance >= 10 else 10
             elif strategy == "consensus_funnel":
-                # Chat consensus (>75%): Hero bets 10% (max 750 pts)
-                bet_pct = 0.10 if idx == 0 else 0.07
-                amt = max(10, min(750, int(balance * bet_pct))) if balance >= 10 else 10
+                # Chat consensus (>=55% with real voters): scale responsibly with confidence
+                high_conf = analysis.get("consensus_pct", 55.0) >= 65.0 and analysis.get("total_voters", 0) >= 25
+                if high_conf:
+                    bet_pct = 0.20 if idx == 0 else 0.14
+                    cap = 2000 if idx == 0 else 1200
+                else:
+                    bet_pct = 0.12 if idx == 0 else 0.08
+                    cap = 1000 if idx == 0 else 750
+                amt = max(10, min(cap, int(balance * bet_pct))) if balance >= 10 else 10
             elif strategy == "random_gamble":
                 # 50/50 Coin Flip / Dice: CAPITAL PRESERVATION MODE!
                 # STRICTLY CAP HERO BET to 3% of balance (max 150 pts, min 10 pts)
@@ -452,18 +462,52 @@ class MasterCrossBetEngine:
                 self.active_prediction = analysis
                 return
 
-            self.active_prediction = analysis
+            if pred_id not in self.first_seen_predictions:
+                self.first_seen_predictions[pred_id] = time.time()
+                logger.info(
+                    f"👀 [PredictionDetected] {streamer}: '{analysis.get('title')}' (duration={pred_obj.get('duration')}s, remaining={pred_obj.get('remaining_seconds')}s, voters={analysis.get('total_voters')})"
+                )
+                if len(self.first_seen_predictions) > 200:
+                    # Prune old keys safely
+                    self.first_seen_predictions = {k: v for k, v in list(self.first_seen_predictions.items())[-100:]}
 
             remaining = pred_obj.get("remaining_seconds", 30)
             if remaining < 2:
                 return
+
+            duration = pred_obj.get("duration", 60)
+            elapsed = pred_obj.get("elapsed_seconds")
+            if elapsed is None:
+                elapsed = int(time.time() - self.first_seen_predictions.get(pred_id, time.time()))
+
+            voters = analysis.get("total_voters", 0)
+            strategy = analysis.get("strategy")
+            late_remaining_trigger = max(14, min(25, int(duration * 0.28)))
+            max_wait_elapsed = min(35, max(12, int(duration * 0.40)))
+
+            # Wait for real chat votes on open-ended standard predictions before locking in consensus_funnel vs balanced_arbitrage
+            should_fire_now = (
+                strategy in ("controlled_funnel", "statistical_edge", "random_gamble")
+                or (voters >= 25 and strategy == "consensus_funnel")
+                or (elapsed >= max_wait_elapsed)
+                or (remaining <= late_remaining_trigger)
+            )
+
+            if not should_fire_now:
+                analysis["waiting_for_consensus"] = True
+                analysis["auto_executed"] = False
+                self.active_prediction = analysis
+                return
+
+            analysis["waiting_for_consensus"] = False
+            self.active_prediction = analysis
 
             # Mark processed immediately so no duplicate execution
             self.processed_predictions.add(pred_id)
             analysis["auto_executed"] = True
 
             logger.info(
-                f"⚡ [InstantAutoBet] Triggering automatic fleet cross-bet for {streamer} on '{analysis.get('title')}' ({remaining}s remaining)..."
+                f"⚡ [SmartAutoBet] Triggering fleet cross-bet for {streamer} on '{analysis.get('title')}' [{strategy}] (voters={voters}, {remaining}s remaining)..."
             )
             await self.execute_fleet_cross_bet(analysis)
         except Exception as e:
