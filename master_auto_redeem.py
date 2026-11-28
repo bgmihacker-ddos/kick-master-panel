@@ -275,14 +275,17 @@ class MasterAutoRedeem:
             return
 
         collected_rewards: List[Dict[str, Any]] = []
-        rate_limited = False
+        consecutive_429 = 0
         for streamer in target_streamers:
             was_cached = streamer in self.rewards_cache and (time.time() - self.rewards_cache[streamer][0]) < self.rewards_cache_ttl
-            rewards, hit_429 = await asyncio.to_thread(self.fetch_streamer_rewards, streamer, not rate_limited)
+            rewards, hit_429 = await asyncio.to_thread(self.fetch_streamer_rewards, streamer, consecutive_429 < 3)
             if hit_429:
-                rate_limited = True
-            if not was_cached and not hit_429:
-                await asyncio.sleep(1.5)
+                consecutive_429 += 1
+                await asyncio.sleep(2.5)
+            else:
+                consecutive_429 = 0
+                if not was_cached:
+                    await asyncio.sleep(1.5)
             if not rewards:
                 continue
 

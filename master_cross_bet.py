@@ -534,14 +534,30 @@ class MasterCrossBetEngine:
             logger.debug(f"[StreamerCheck] {streamer} notice: {e}")
 
     async def run_loop(self):
-        """Central loop monitoring live predictions across streamers concurrently."""
-        logger.info("🎲 Master Cross-Bet Engine active: monitoring fleet predictions concurrently")
+        """Central loop monitoring live predictions efficiently (polls live channels every 3s, full roster every 45s)."""
+        logger.info("🎲 Master Cross-Bet Engine active: monitoring live predictions concurrently")
         await asyncio.sleep(3)
+        cycle = 0
 
         while not self._is_stopped:
+            cycle += 1
             try:
-                # Concurrent parallel check across all target streamers
-                tasks = [self.check_single_streamer(s) for s in self.target_streamers]
+                live_set = set()
+                for w in self.workers:
+                    for s_name, is_on in (w.last_status.get("streamers") or {}).items():
+                        if is_on:
+                            live_set.add(s_name)
+
+                # Full sweep every 15 cycles (~45s) or if live set is empty; otherwise poll live streamers + 1 rotating backup
+                if not live_set or cycle % 15 == 1:
+                    to_check = self.target_streamers
+                else:
+                    offline = [s for s in self.target_streamers if s not in live_set]
+                    to_check = [s for s in self.target_streamers if s in live_set]
+                    if offline:
+                        to_check.append(offline[cycle % len(offline)])
+
+                tasks = [self.check_single_streamer(s) for s in to_check]
                 await asyncio.gather(*tasks, return_exceptions=True)
             except asyncio.CancelledError:
                 break
