@@ -779,13 +779,13 @@
         card.innerHTML = `
           <div>
             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
-              <span style="font-weight: 700; font-size: 13px; color: ${canRedeem ? 'var(--kick-green)' : 'var(--text-main)'};">
-                ${rw.title} <span style="font-size: 10px; color: var(--text-dim);">(${rwStreamer})</span>
+              <span style="font-weight: 700; font-size: 13px; color: ${canRedeem ? 'var(--kick-green)' : (rw.is_priority_vp_upi ? '#facc15' : 'var(--text-main)')};">
+                ${rw.is_priority_vp_upi ? '🔥 ' : ''}${rw.title} <span style="font-size: 10px; color: var(--text-dim);">(${rwStreamer})</span>
               </span>
               <span class="mono bold pts" style="font-size: 12px; white-space: nowrap;">${(rw.cost || 0).toLocaleString()} pts</span>
             </div>
             <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-              Top Hero: <b>${bestHero || '4 valo 01'}</b> (${heroPts.toLocaleString()} pts) &bull; Input: ${rw.is_user_input_required ? 'Required' : 'Instant'}
+              ${rw.is_priority_vp_upi ? '<b style="color:#facc15">VP/UPI Priority</b> &bull; ' : ''}Top Hero: <b>${bestHero || '4 valo 01'}</b> (${heroPts.toLocaleString()} pts)
             </div>
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">

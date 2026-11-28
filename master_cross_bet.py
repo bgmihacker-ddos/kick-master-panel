@@ -305,14 +305,22 @@ class MasterCrossBetEngine:
                 f"🏆 Single-Spearhead Hero (Closest to Redeem): [{h_alias}] with {balance:,} pts on {streamer} (other {max(0, len(hero_accs)-1)} Heroes hold safely)"
             )
 
+            vp_upi_priority = streamer.lower() in {"harshkhelraay", "s8ul_sid", "hydraflick", "nonstopgaming", "soulzeref", "klurge", "binks69"}
+
             if strategy == "controlled_funnel":
                 amt = max(10, min(self.max_hero_bet, int(balance * self.hero_bet_pct))) if balance >= 10 else 10
             elif strategy == "statistical_edge":
-                amt = max(10, min(3000, int(balance * 0.25))) if balance >= 10 else 10
+                pct = 0.30 if vp_upi_priority else 0.25
+                cap = 4000 if vp_upi_priority else 3000
+                amt = max(10, min(cap, int(balance * pct))) if balance >= 10 else 10
             elif strategy == "consensus_funnel":
                 high_conf = analysis.get("consensus_pct", 55.0) >= 65.0 and analysis.get("total_voters", 0) >= 20
-                bet_pct = 0.22 if high_conf else 0.15
-                cap = 2500 if high_conf else 1200
+                if high_conf:
+                    bet_pct = 0.25 if vp_upi_priority else 0.22
+                    cap = 3500 if vp_upi_priority else 2500
+                else:
+                    bet_pct = 0.18 if vp_upi_priority else 0.15
+                    cap = 1600 if vp_upi_priority else 1200
                 amt = max(10, min(cap, int(balance * bet_pct))) if balance >= 10 else 10
             elif strategy == "random_gamble":
                 # 50/50 Coin Flip / Dice: CAPITAL PRESERVATION MODE (3%, max 150 pts)

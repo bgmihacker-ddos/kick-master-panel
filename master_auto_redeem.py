@@ -78,13 +78,20 @@ class MasterAutoRedeem:
         self.ready_alert_cooldown = 43200  # 12 hours per alert to avoid spam
         self._is_stopped = False
 
-    def send_telegram_ready_alert(self, alias: str, streamer: str, reward_title: str, cost: int, current_pts: int):
+    def is_vp_or_upi_reward(self, reward: Dict[str, Any]) -> bool:
+        title = (reward.get("title") or "").lower()
+        desc = (reward.get("description") or "").lower()
+        text = f"{title} {desc}"
+        return any(k in text for k in ["vp", "valorant", "upi", "gpay", "paytm", "cash", "reedem", "redeem code"])
+
+    def send_telegram_ready_alert(self, alias: str, streamer: str, reward_title: str, cost: int, current_pts: int, is_priority: bool = False):
         """Sends an instant alert to the Redeem Telegram bot when points are READY TO REDEEM."""
         if not self.tg_bot_token or not self.tg_chat_id:
             return
 
+        header = "🔥 *TOP PRIORITY READY (VP / UPI CASH)!*" if is_priority else "🔔 *REWARD READY TO REDEEM! (Notify-Only)*"
         text = (
-            f"🔔 *REWARD READY TO REDEEM! (Notify-Only)*\n\n"
+            f"{header}\n\n"
             f"👑 *Hero Account:* `{alias}`\n"
             f"📺 *Streamer:* `{streamer}`\n"
             f"🎁 *Qualified Reward:* {reward_title}\n"
@@ -280,18 +287,11 @@ class MasterAutoRedeem:
                 continue
 
             target_rews = [r for r in rewards if self.is_target_reward(r)]
-            if streamer == self.target_streamer:
-                tagged = []
-                for tr in (target_rews if target_rews else rewards):
-                    tr_copy = dict(tr)
-                    tr_copy.setdefault("streamer", streamer)
-                    tagged.append(tr_copy)
-                collected_rewards = tagged + collected_rewards
-            elif target_rews and len(collected_rewards) < 12:
-                for tr in target_rews:
-                    tr_copy = dict(tr)
-                    tr_copy.setdefault("streamer", streamer)
-                    collected_rewards.append(tr_copy)
+            for tr in target_rews:
+                tr_copy = dict(tr)
+                tr_copy["streamer"] = streamer
+                tr_copy["is_priority_vp_upi"] = self.is_vp_or_upi_reward(tr)
+                collected_rewards.append(tr_copy)
 
             if not target_rews:
                 continue
@@ -300,6 +300,7 @@ class MasterAutoRedeem:
                 cost = r.get("cost", 0)
                 reward_id = r.get("id")
                 reward_title = r.get("title", "Reward")
+                is_pri = self.is_vp_or_upi_reward(r)
 
                 for alias, h_info in self.hero_accounts.items():
                     st_pts = heroes_points_map.get(alias, {}).get(streamer, 0)
@@ -309,8 +310,8 @@ class MasterAutoRedeem:
                         last_alert = self.ready_alerted_cache.get(alert_key, 0)
                         if time.time() - last_alert > self.ready_alert_cooldown:
                             self.ready_alerted_cache[alert_key] = time.time()
-                            logger.info(f"🔔 [RewardNotifier] Points READY for [{alias}] on {streamer}: '{reward_title}' ({cost:,} pts, balance={st_pts:,})")
-                            self.send_telegram_ready_alert(alias, streamer, reward_title, cost, st_pts)
+                            logger.info(f"🔔 [RewardNotifier] {'PRIORITY VP/UPI ' if is_pri else ''}Points READY for [{alias}] on {streamer}: '{reward_title}' ({cost:,} pts, balance={st_pts:,})")
+                            self.send_telegram_ready_alert(alias, streamer, reward_title, cost, st_pts, is_priority=is_pri)
 
                         # 2. Never auto-redeem unless explicitly enabled
                         if self.auto_redeem_enabled:
@@ -326,7 +327,9 @@ class MasterAutoRedeem:
             await asyncio.sleep(0.05)
 
         if collected_rewards:
-            self.available_rewards = collected_rewards[:12]
+            # Put ALL Valorant VP & UPI Cash rewards strictly at the top, ordered by reachability (cost ascending)
+            collected_rewards.sort(key=lambda rw: (0 if rw.get("is_priority_vp_upi") else 1, int(rw.get("cost", 0) or 0)))
+            self.available_rewards = collected_rewards[:24]
 
     async def run_loop(self, get_heroes_data_callback, get_streamers_callback):
         """Periodic background loop scanning all 10 Heroes across all streamers."""
