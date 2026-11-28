@@ -167,17 +167,18 @@ class MasterCrossBetEngine:
             strategy = "controlled_funnel"
             consensus_pct = 100.0
 
-        elif any(br_s in streamer_lower for br_s in ["binks69", "nonstopgaming", "mortal", "s8ul_sid", "hydraflick"]) and \
-             any(kw in title_lower for kw in ["win", "match", "chicken", "winner", "jeetenage", "we dip", "kill", "top 3", "top 5", "wwcd", "booyah"]):
-            # Battle Royale match outcomes: Streamers lose 80%+ of the time.
-            # Hero bets the statistical winner ('no' / 'nahi' / 'lose' / 'har' / 'dip'), while chat bets 'yes'.
+        elif any(br_s in streamer_lower for br_s in ["soulaman", "s8ul_sid", "binks69", "nonstopgaming", "mortal", "hydraflick"]) and \
+             any(kw in title_lower for kw in ["win", "match", "chicken", "winner", "jeetenage", "we dip", "kill", "kills", "top 3", "top 4", "top 5", "top 6", "top 8", "wwcd", "booyah", "6/6", "#1"]) or \
+             (any(br_s in streamer_lower for br_s in ["soulaman", "s8ul_sid", "binks69", "nonstopgaming", "mortal", "hydraflick"]) and (" cd" in f" {title_lower}" or title_lower.startswith("cd"))):
+            # Battle Royale match / challenge outcomes: streamers/teams fail hard challenges ~80% of the time.
+            # Hero bets the statistical winner ('no' / 'nahi' / 'lose' / 'har' / 'dip'), while emotional fans & feeders pump 'yes'.
             out_no = None
             out_yes = None
             for o in outcomes:
-                ot = (o.get("title") or "").lower()
-                if any(neg in ot for neg in ["no", "nahi", "nah", "lose", "dip", "har", "out", "dead", "nhi"]):
+                ot = (o.get("title") or "").strip().lower()
+                if any(neg == ot or neg in ot.split() for neg in ["no", "nahi", "nah", "lose", "dip", "har", "out", "dead", "nhi"]):
                     out_no = o
-                elif any(pos in ot for pos in ["yes", "haan", "win", "live", "chicken"]):
+                elif any(pos == ot or pos in ot.split() for pos in ["yes", "haan", "win", "live", "chicken"]):
                     out_yes = o
 
             if out_no and out_yes:
@@ -185,6 +186,24 @@ class MasterCrossBetEngine:
                 feeder_outcome = out_yes
                 strategy = "statistical_edge"
                 consensus_pct = 80.0
+            else:
+                hero_outcome, feeder_outcome, strategy, consensus_pct = self._resolve_standard_prediction(outcomes, total_voters)
+
+        elif "8bit_goldy" in streamer_lower and any(kw in title_lower for kw in ["bank", "heist", "robbery", "sandy", "cop", "pd"]):
+            # GTA RP Heist: Cops win / Jail is statistically heavily favored
+            out_cop = None
+            out_crim = None
+            for o in outcomes:
+                ot = (o.get("title") or "").strip().lower()
+                if any(k in ot for k in ["cop", "jail", "pd win", "police"]):
+                    out_cop = o
+                else:
+                    out_crim = o
+            if out_cop and out_crim and len(outcomes) == 2:
+                hero_outcome = out_cop
+                feeder_outcome = out_crim
+                strategy = "statistical_edge"
+                consensus_pct = 75.0
             else:
                 hero_outcome, feeder_outcome, strategy, consensus_pct = self._resolve_standard_prediction(outcomes, total_voters)
 
@@ -273,152 +292,145 @@ class MasterCrossBetEngine:
 
         # Sort Hero accounts by actual points descending: closest to redeem is prioritized!
         hero_accs = sorted(hero_accs, key=lambda a: a.get("actual_pts", 0), reverse=True)
-        if hero_accs:
+        executed_bets: List[Dict[str, Any]] = []
+
+        # 1. Single-Spearhead Hero Task (Only #1 Closest-to-Redeem Hero bets so 100% of Hero winnings go to ONE account!)
+        async def dispatch_spearhead_hero() -> Optional[Dict[str, Any]]:
+            if not hero_accs:
+                return None
             top_hero = hero_accs[0]
+            h_alias = top_hero["alias"]
+            balance = top_hero.get("actual_pts", 0)
             logger.info(
-                f"🏆 Primary Target Hero (Closest to Redeem): [{top_hero['alias']}] with {top_hero.get('actual_pts', 0):,} pts on {streamer}"
+                f"🏆 Single-Spearhead Hero (Closest to Redeem): [{h_alias}] with {balance:,} pts on {streamer} (other {max(0, len(hero_accs)-1)} Heroes hold safely)"
             )
 
-        # 1. Multi-Hero Bet Execution with Strategy-Aware Capital Protection
-        for idx, h_acc in enumerate(hero_accs):
-            h_alias = h_acc["alias"]
-            balance = h_acc.get("actual_pts", 0)
-
             if strategy == "controlled_funnel":
-                # 100% win certainty (xyroplayzz): Bet 35% of balance to maximize profit
-                bet_pct = self.hero_bet_pct if idx == 0 else max(0.25, self.hero_bet_pct - 0.05)
-                amt = max(10, min(self.max_hero_bet, int(balance * bet_pct))) if balance >= 10 else 10
+                amt = max(10, min(self.max_hero_bet, int(balance * self.hero_bet_pct))) if balance >= 10 else 10
             elif strategy == "statistical_edge":
-                # High edge (BGMI streamer loss): Hero bets 15% (max 1,000 pts) on 'NO'
-                bet_pct = 0.15 if idx == 0 else 0.10
-                amt = max(10, min(1000, int(balance * bet_pct))) if balance >= 10 else 10
+                amt = max(10, min(3000, int(balance * 0.25))) if balance >= 10 else 10
             elif strategy == "consensus_funnel":
-                # Chat consensus (>=55% with real voters): scale responsibly with confidence
-                high_conf = analysis.get("consensus_pct", 55.0) >= 65.0 and analysis.get("total_voters", 0) >= 25
-                if high_conf:
-                    bet_pct = 0.20 if idx == 0 else 0.14
-                    cap = 2000 if idx == 0 else 1200
-                else:
-                    bet_pct = 0.12 if idx == 0 else 0.08
-                    cap = 1000 if idx == 0 else 750
+                high_conf = analysis.get("consensus_pct", 55.0) >= 65.0 and analysis.get("total_voters", 0) >= 20
+                bet_pct = 0.22 if high_conf else 0.15
+                cap = 2500 if high_conf else 1200
                 amt = max(10, min(cap, int(balance * bet_pct))) if balance >= 10 else 10
             elif strategy == "random_gamble":
-                # 50/50 Coin Flip / Dice: CAPITAL PRESERVATION MODE!
-                # STRICTLY CAP HERO BET to 3% of balance (max 150 pts, min 10 pts)
-                # Never bleed thousands of points on a 50/50 coin flip!
+                # 50/50 Coin Flip / Dice: CAPITAL PRESERVATION MODE (3%, max 150 pts)
                 amt = max(10, min(150, int(balance * 0.03))) if balance >= 10 else 10
             else:
                 # Balanced arbitrage: conservative 5% (max 250 pts)
                 amt = max(10, min(250, int(balance * 0.05))) if balance >= 10 else 10
 
-            logger.info(f"👑 Executing Hero [{h_alias}] bet on '{hero_title}' ({amt:,} pts)...")
-            
-            # 1a. Send bet via worker node
-            res = await h_acc["worker"].send_bet(h_alias, streamer, hero_id, amt)
+            logger.info(f"👑 Executing Spearhead Hero [{h_alias}] bet on '{hero_title}' ({amt:,} pts)...")
+            res = await top_hero["worker"].send_bet(h_alias, streamer, hero_id, amt)
             if res.get("success"):
-                logger.success(f"👑 Hero [{h_alias}] bet placed via worker node! Amount: {amt} pts")
-                executed_bets.append({
+                logger.success(f"👑 Spearhead [{h_alias}] bet placed via worker node! Amount: {amt} pts")
+                return {
                     "account": h_alias,
-                    "worker": h_acc["worker"].name,
-                    "role": "PRIMARY_HERO_COLLECTOR" if idx == 0 else "HERO_COLLECTOR",
+                    "worker": top_hero["worker"].name,
+                    "role": "PRIMARY_HERO_COLLECTOR",
                     "outcome": hero_title,
                     "amount": amt,
                     "status": "success"
-                })
-            else:
-                # 1b. Fallback to direct Kick API vote if worker call did not succeed
-                h_token = self.hero_accounts_map.get(h_alias, {}).get("token") or (self.hero_token if h_alias == self.hero_alias else None)
-                if h_token:
-                    try:
-                        from kick_prediction import KickPrediction
-                        pred_client = KickPrediction(proxy=None)
-                        ok, vote_res = await asyncio.to_thread(
-                            pred_client.vote_prediction,
-                            streamer, hero_id, amt, h_token
-                        )
-                        if ok:
-                            logger.success(f"👑 Hero [{h_alias}] direct bet placed! Result: {vote_res}")
-                            executed_bets.append({
-                                "account": h_alias,
-                                "worker": h_acc["worker"].name + " (Direct Kick API)",
-                                "role": "PRIMARY_HERO_COLLECTOR" if idx == 0 else "HERO_COLLECTOR",
-                                "outcome": hero_title,
-                                "amount": amt,
-                                "status": "success"
-                            })
-                    except Exception as e:
-                        logger.error(f"Error placing direct Hero [{h_alias}] bet: {e}")
+                }
 
-        # 2. Feeder Bets Execution (Dispatched concurrently in fast batches of 10 with 0.08s stagger)
-        async def dispatch_single_feeder(idx: int, acc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            h_token = self.hero_accounts_map.get(h_alias, {}).get("token") or (self.hero_token if h_alias == self.hero_alias else None)
+            if h_token:
+                try:
+                    from kick_prediction import KickPrediction
+                    pred_client = KickPrediction(proxy=None)
+                    ok, vote_res = await asyncio.to_thread(
+                        pred_client.vote_prediction,
+                        streamer, hero_id, amt, h_token
+                    )
+                    if ok:
+                        logger.success(f"👑 Spearhead [{h_alias}] direct bet placed! Result: {vote_res}")
+                        return {
+                            "account": h_alias,
+                            "worker": top_hero["worker"].name + " (Direct Kick API)",
+                            "role": "PRIMARY_HERO_COLLECTOR",
+                            "outcome": hero_title,
+                            "amount": amt,
+                            "status": "success"
+                        }
+                except Exception as e:
+                    logger.error(f"Error placing direct Spearhead [{h_alias}] bet: {e}")
+            return None
+
+        # 2. Prepare Feeder Batches Grouped Per Worker (All 7 miners fire concurrently via /api/bet/batch!)
+        worker_batches: Dict[Any, List[Dict[str, Any]]] = {}
+        feeder_meta: Dict[str, Dict[str, Any]] = {}
+
+        for idx, acc in enumerate(other_accs):
             balance = acc.get("actual_pts", 0)
             alias = acc["alias"]
+            if balance < 10:
+                continue
 
             if strategy == "controlled_funnel":
-                # 100% feeders dump into losing side to pump Hero pool
-                out_id = feeder_id
-                out_title = feeder_title
-                role = "FEEDER_DONOR"
-                amt = max(10, min(self.max_feeder_bet, int(balance * self.feeder_bet_pct))) if balance >= 10 else 10
-
+                out_id, out_title, role = feeder_id, feeder_title, "FEEDER_DONOR"
+                amt = max(10, min(self.max_feeder_bet, int(balance * self.feeder_bet_pct)))
             elif strategy == "statistical_edge":
-                # 80% feeders bet on emotional chat outcome (feeder_id / YES) to pump odds for Hero (NO)
-                # 20% hedge on Hero side
                 pick_hero_side = (idx % 5 == 0)
                 out_id = hero_id if pick_hero_side else feeder_id
                 out_title = hero_title if pick_hero_side else feeder_title
                 role = "ARBITRAGE_HEDGE" if pick_hero_side else "ODDS_PUMP"
-                amt = max(10, min(1000, int(balance * 0.25))) if balance >= 10 else 10
-
+                amt = max(10, min(1000, int(balance * 0.25)))
             elif strategy == "random_gamble":
-                # 50/50 split across feeders: Fleet stays delta-neutral
                 pick_hero_side = (idx % 2 == 0)
                 out_id = hero_id if pick_hero_side else feeder_id
                 out_title = hero_title if pick_hero_side else feeder_title
                 role = "COINFLIP_HEDGE_HERO" if pick_hero_side else "COINFLIP_HEDGE_FEEDER"
-                amt = max(10, min(250, int(balance * 0.15))) if balance >= 10 else 10
-
+                amt = max(10, min(250, int(balance * 0.15)))
             elif strategy == "consensus_funnel":
-                # Feeders dump into feeder_id to pump Hero payout
-                out_id = feeder_id
-                out_title = feeder_title
-                role = "FEEDER_DONOR"
-                amt = max(10, min(self.max_feeder_bet, int(balance * self.feeder_bet_pct))) if balance >= 10 else 10
-
+                out_id, out_title, role = feeder_id, feeder_title, "FEEDER_DONOR"
+                amt = max(10, min(self.max_feeder_bet, int(balance * self.feeder_bet_pct)))
             else:
-                # Balanced arbitrage: 67% feeder outcome, 33% hero outcome
                 pick_hero_side = (idx % 3 == 0)
                 out_id = hero_id if pick_hero_side else feeder_id
                 out_title = hero_title if pick_hero_side else feeder_title
                 role = "ARBITRAGE_HEDGE" if pick_hero_side else "LIQUIDITY_DONOR"
-                amt = max(10, min(500, int(balance * 0.20))) if balance >= 10 else 10
+                amt = max(10, min(500, int(balance * 0.20)))
 
-            try:
-                res = await acc["worker"].send_bet(alias, streamer, out_id, amt)
-                if res.get("success"):
-                    return {
-                        "account": alias,
-                        "worker": acc["worker"].name,
-                        "role": role,
-                        "outcome": out_title,
-                        "amount": amt,
-                        "status": "success"
-                    }
-                elif res.get("skipped"):
-                    logger.debug(f"Feeder [{alias}] skipped on {streamer}: insufficient points")
-            except Exception as e:
-                logger.debug(f"Feeder [{alias}] bet notice: {e}")
-            return None
+            w = acc["worker"]
+            worker_batches.setdefault(w, []).append({
+                "alias": alias,
+                "streamer": streamer,
+                "outcome_id": out_id,
+                "amount": amt
+            })
+            feeder_meta[alias] = {"worker": w.name, "role": role, "outcome": out_title, "amount": amt}
 
-        batch_size = 10
-        for i in range(0, len(other_accs), batch_size):
-            chunk = other_accs[i : i + batch_size]
-            tasks = [dispatch_single_feeder(i + idx, acc) for idx, acc in enumerate(chunk)]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+        async def dispatch_worker_feeders(w: WorkerNodeClient, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            results = await w.send_bet_batch(items)
+            ok_bets = []
             for r in results:
-                if isinstance(r, dict) and r.get("status") == "success":
-                    executed_bets.append(r)
-            await asyncio.sleep(0.08)
+                if isinstance(r, dict) and r.get("success"):
+                    al = r.get("alias")
+                    meta = feeder_meta.get(al, {})
+                    ok_bets.append({
+                        "account": al,
+                        "worker": meta.get("worker", w.name),
+                        "role": meta.get("role", "FEEDER"),
+                        "outcome": meta.get("outcome", feeder_title),
+                        "amount": r.get("amount", meta.get("amount", 0)),
+                        "status": "success"
+                    })
+            return ok_bets
+
+        # Fire Spearhead Hero + all 7 miner batches simultaneously!
+        t_start = time.time()
+        all_tasks = [dispatch_spearhead_hero()] + [
+            dispatch_worker_feeders(w, items) for w, items in worker_batches.items()
+        ]
+        gathered = await asyncio.gather(*all_tasks, return_exceptions=True)
+
+        if isinstance(gathered[0], dict):
+            executed_bets.append(gathered[0])
+        for worker_res in gathered[1:]:
+            if isinstance(worker_res, list):
+                executed_bets.extend(worker_res)
+        elapsed_sec = round(time.time() - t_start, 2)
 
         # Record in history
         history_record = {
@@ -439,7 +451,7 @@ class MasterCrossBetEngine:
         analysis["executed"] = True
         analysis["executed_bets_count"] = len(executed_bets)
 
-        logger.success(f"🎉 Fleet Cross-Bet Complete! Dispatched {len(executed_bets)} bets on {streamer}!")
+        logger.success(f"🎉 Fleet Cross-Bet Complete in {elapsed_sec}s! Dispatched {len(executed_bets)} bets on {streamer}!")
 
     async def check_single_streamer(self, streamer: str):
         """Polls a single streamer for active prediction and fires instant auto-bet."""
@@ -482,13 +494,13 @@ class MasterCrossBetEngine:
 
             voters = analysis.get("total_voters", 0)
             strategy = analysis.get("strategy")
-            late_remaining_trigger = max(14, min(25, int(duration * 0.28)))
-            max_wait_elapsed = min(35, max(12, int(duration * 0.40)))
+            late_remaining_trigger = max(10, min(20, int(duration * 0.22)))
+            max_wait_elapsed = 18 if duration <= 90 else 28
 
-            # Wait for real chat votes on open-ended standard predictions before locking in consensus_funnel vs balanced_arbitrage
+            # Wait briefly for real chat votes on standard predictions; fast <8s dispatch handles short 60s preds safely
             should_fire_now = (
                 strategy in ("controlled_funnel", "statistical_edge", "random_gamble")
-                or (voters >= 25 and strategy == "consensus_funnel")
+                or (voters >= 20 and strategy == "consensus_funnel")
                 or (elapsed >= max_wait_elapsed)
                 or (remaining <= late_remaining_trigger)
             )
