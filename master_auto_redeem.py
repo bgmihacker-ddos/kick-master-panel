@@ -335,7 +335,7 @@ class MasterAutoRedeem:
         """Periodic background loop scanning all 10 Heroes across all streamers."""
         mode_str = "AUTO-REDEEM" if self.auto_redeem_enabled else "NOTIFY-ONLY (No auto-redeem)"
         logger.info(f"🎁 Multi-Hero Reward Monitor active [{mode_str}]: scanning {len(self.hero_accounts)} Hero accounts")
-        await asyncio.sleep(5)
+        await asyncio.sleep(15)
         while not self._is_stopped:
             try:
                 heroes_data = await get_heroes_data_callback()
@@ -346,4 +346,4 @@ class MasterAutoRedeem:
                 break
             except Exception as e:
                 logger.debug(f"[AutoRedeem] Scan loop notice: {e}")
-            await asyncio.sleep(300)  # Check every 5 minutes (uses 30m rewards cache)
+            await asyncio.sleep(45 if not self.available_rewards else 300)  # Retry faster if cold boot hit 429
